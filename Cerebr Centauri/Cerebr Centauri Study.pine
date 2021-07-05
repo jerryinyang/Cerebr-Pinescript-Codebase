@@ -1,0 +1,299 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © Jerry
+
+//@version=4
+study("Cerebr Centauri", overlay = true)
+//General Inputs
+//{
+res = input("240", "Higher Timeframe", input.resolution)
+htfMeth = input("Inputs", "HTF Method?", options = ["Data Import", "TF Conversion", "Inputs"])
+gapsOn = input(false, "Bar Merge On?")
+
+slType = input("Trailing Stop", "Stop Loss Calculation", options = ["Pips", "Trailing Stop"], group = "Risk Management")
+slPip = input(40, "Stop Loss In Pips", group = "Risk Management")
+
+tpType = input("Risk to Reward", "Take Profit Calculation", options = ["Risk to Reward", "Pips"], group = "Risk Management")
+rrr = input(2, "Reward - Risk Ratio", group = "Risk Management")
+tpPip = input(100, "Take Profit Pips", group = "Risk Management")
+
+//Period Converter Function
+//{
+resToInt(_res) =>
+    resInt = 0
+    if _res == "D"
+        resInt := 1440
+    else if _res == "W"
+        resInt := 10080
+    else if _res == "M"
+        resInt := 43200
+    else
+        resInt := round(tonumber(_res))
+    
+    resInt
+
+periodConv(_len, _res) =>
+    tf = round(tonumber(timeframe.period))
+    htf = resToInt(_res)
+    
+    len = tf < htf ? ((htf * _len) / tf) : na
+    
+    len
+//}
+
+//Functions to Allow Series Length
+//{
+Sum(src,p) => a = cum(src), a - a[max(p,0)]
+
+Sma(src,p) => a = cum(src), (a - a[max(p,0)])/max(p,0)
+
+Ema(src,p) =>
+    ema = 0.
+    sf = 2/(p+1)
+    ema := nz(ema[1] + sf*(src - ema[1]),src)
+
+Wma(src,p) => 
+    mp = max(p,0)
+    denom = mp*(mp+1)/2
+    a = cum(src), (mp*a - Sum(a[1],p))/denom
+
+Lsma(src,p) => 
+    mp = max(p,0)
+    denom = mp*(mp+1)/2
+    a = cum(src), b = (mp*a - Sum(a[1],p))/denom
+    3*b - 2*(a - a[mp])/mp
+    
+//}
+
+//}----- End of General Input
+//FUNCTIONS ==> periodConv(_len, lres, _res)
+
+//*************** CURRENT TIMEFRAME INDICATORS ***************//
+//{
+
+//MOVING AVERAGES
+//{
+maSrc = input(close, "Moving Average Source", input.source, group="MOVING AVERAGE")
+maType = input("EMA", "Moving Average Type", options=["SMA", "EMA", "LSMA", "WMA"], group="MOVING AVERAGE")
+
+fLen  = input(5, "Fast Moving Average", input.integer, group="MOVING AVERAGE")
+sLen  = input(10, "Slow Moving Average", input.integer, group="MOVING AVERAGE")
+
+calcMA(_len) =>
+    ma = maType == "SMA" ? Sma(maSrc, _len) : 
+      (maType == "EMA" ? Ema(maSrc, _len) : 
+      (maType == "LSMA" ? Lsma(maSrc, _len) : 
+      (maType == "WMA" ? Wma(maSrc, _len) : na)))
+    ma
+    
+fastMa = calcMA(fLen)
+slowMa = calcMA(sLen)
+
+maLong = fastMa >= slowMa
+maShort = fastMa <= slowMa
+
+//}----- End of Moving Averages
+//SIGNALS ==> maLong, maShort
+
+//STOCHASTIC 
+//{
+periodK = input(10, title="Stoch Length", minval=1, group="STOCHASTIC")
+smoothK = input(3, title="Stochastic Line", minval=1, group="STOCHASTIC")
+periodD = input(3, title="Stoch Signal Line", minval=1, group="STOCHASTIC")
+stOB    = input(80, title="Stoch Overbought", minval=50, group="STOCHASTIC")
+stOS    = input(20, title="Stoch OverSold", minval=1, group="STOCHASTIC")
+
+
+stoch  = sma(stoch(close, high, low, periodK), smoothK)
+stSma = sma(stoch, periodD)
+
+stLong = stoch >= stSma and stoch <= stOB
+stShort = stoch <= stSma and stoch >= stOS
+
+//}-----End of Stocastics
+//SIGNALS ==> stLong, stShort
+
+//RSI
+//{
+rsiSrc = input(close, "RSI Source", input.source, group="RSI")
+rsiLen  = input(9, "RSI Period", input.integer, group="RSI")
+usersiOBS = input(true, "Use RSI Overbought/Oversold Levels?", group="RSI")
+rsiOB    = input(80, title="RSI Overbought", minval=50, group="RSI")
+rsiOS    = input(20, title="RSI OverSold", minval=1, group="RSI")
+
+rsi = rsi(rsiSrc, rsiLen)
+
+rsiLong = usersiOBS ? rsi <= rsiOB : rsi >= 50
+rsiShort = usersiOBS ? rsi >= rsiOS : rsi <= 50
+
+//}----- End of RSI
+//SIGNALS ==> rsiLong, rsiShort
+
+//MACD
+//{
+
+macdSrc = input(close, "MACD Source", input.source, group="MACD")
+macdfLen = input(12, "Fast MACD", input.integer, group="MACD")
+macdsLen = input(21, "Slow MACD", input.integer, group="MACD")
+macdSig = input(9, "MACD Signal Line", input.integer, group="MACD")
+useDec = input(false, "Use MACD Decreasing Rule?")
+
+[macd, signal, hist] = macd(macdSrc, macdfLen, macdsLen, macdSig)
+
+decHistGreen = hist > 0 and hist[1] > hist
+decHistRed = hist > 0 and hist[1] < hist
+
+// Alternative Rule
+// macdRed = hist < 0 or (hist == 0 and hist[1] > 0)
+// macdGreen = hist > 0 or (hist == 0 and hist[1] < 0)
+
+histRed = hist <= 0
+histGreen = hist >= 0
+
+macdUp = macd >= 0
+macdDown = macd <= 0
+
+macdLong = useDec ? histRed and decHistRed : macdUp
+macdShort = useDec ? histGreen and decHistGreen : macdDown
+//}
+//SIGNALS ==> macdLong and macdShort
+
+//}
+
+//*************** HIGHER TIMEFRAME INDICATORS ***************//
+//{
+
+//HFT MOVING AVERAGE
+//{
+
+//INPUTS
+inphtfFLen  = input(80, "Fast Moving Average", input.integer, group="HTF MOVING AVERAGE")
+inphtfSLen  = input(162, "Slow Moving Average", input.integer, group="HTF MOVING AVERAGE")
+
+//CONVERSIONS
+convHtfFLen = periodConv(fLen, res)
+convHtfSLen = periodConv(sLen, res)
+
+
+//CALCULATIONS
+htffastMa = htfMeth == "Data Import" ? (gapsOn ? security(syminfo.tickerid, res, fastMa, barmerge.gaps_on, barmerge.lookahead_off) : 
+  security(syminfo.tickerid, res, fastMa, barmerge.gaps_off, barmerge.lookahead_off)) : 
+  (htfMeth == "TF Conversion" ? (calcMA(convHtfFLen)) : 
+  (htfMeth == "Inputs" ? (calcMA(inphtfFLen)) : 
+  (na)))
+
+htfslowMa = htfMeth == "Data Import" ? (gapsOn ? security(syminfo.tickerid, res, slowMa, barmerge.gaps_on, barmerge.lookahead_off) : 
+  security(syminfo.tickerid, res, slowMa, barmerge.gaps_off, barmerge.lookahead_off)) : 
+  (htfMeth == "TF Conversion" ? (calcMA(convHtfSLen)) : 
+  (htfMeth == "Inputs" ? (calcMA(inphtfSLen)) : 
+  (na)))
+
+// SIGNALS
+htfmaLong = htffastMa >= htfslowMa
+htfmaShort = htffastMa <= htfslowMa
+
+//}
+//SIGNALS ==> htfmaLong, htfmaShort
+
+//HTF STOCHASTICS
+//{
+
+//INPUTS
+inphtfperiodK = input(162, title="Stoch Length", minval=1, group="HTF STOCHASTIC")
+inphtfsmoothK = input(48, title="Stochastic Line", minval=1, group="HTF STOCHASTIC")
+inphtfperiodD = input(48, title="Stoch Signal Line", minval=1, group="HTF STOCHASTIC")
+
+//CONVERSIONS
+convhtfperiodK = periodConv(periodK, res)
+convhtfsmoothK = periodConv(smoothK, res)
+convhtfperiodD = periodConv(periodD, res)
+
+//CALCULATIONS
+
+
+htfstoch = htfMeth == "Data Import" ? (gapsOn ? security(syminfo.tickerid, res, stoch, barmerge.gaps_on, barmerge.lookahead_off) : 
+  security(syminfo.tickerid, res, stoch, barmerge.gaps_off, barmerge.lookahead_off)) : 
+  (htfMeth == "TF Conversion" ? (sma(stoch(close, high, low, convhtfperiodK), convhtfsmoothK)) : 
+  (htfMeth == "Inputs" ? (sma(stoch(close, high, low, inphtfperiodK), inphtfsmoothK)) : 
+  (na)))
+
+htfstSma = htfMeth == "Data Import" ? (gapsOn ? security(syminfo.tickerid, res, stSma, barmerge.gaps_on, barmerge.lookahead_off) : 
+  security(syminfo.tickerid, res, stSma, barmerge.gaps_off, barmerge.lookahead_off)) : 
+  (htfMeth == "TF Conversion" ? (sma(htfstoch, convhtfperiodD)) : 
+  (htfMeth == "Inputs" ? (sma(htfstoch, inphtfperiodD)) : 
+  (na)))
+
+//SIGNALS
+htfstLong = htfstoch >= htfstSma and htfstoch <= stOB
+htfstShort = htfstoch <= htfstSma and htfstoch >= stOS
+//}
+//SIGNALS ==> htfstLong, htfstShort
+
+//HTF RSI
+//{
+
+//INPUTS
+inphtfrsiLen  = input(240, "RSI Period", input.integer, group="HTF RSI")
+inphtfusersiOBS = input(true, "Use RSI Overbought/Oversold Levels?", group="HTF RSI")
+
+up1 = rma(max(change(rsiSrc), 0), inphtfrsiLen)
+down1 = rma(-min(change(rsiSrc), 0), inphtfrsiLen)
+buff = down1 == 0 ? 100 : up1 == 0 ? 0 : 100 - (100 / (1 + up1 / down1))
+
+
+//CALCULATIONS
+
+htfrsi = htfMeth == "Data Import" ? (gapsOn ? security(syminfo.tickerid, res, rsi, barmerge.gaps_on, barmerge.lookahead_off) : 
+  security(syminfo.tickerid, res, rsi, barmerge.gaps_off, barmerge.lookahead_off)) : 
+  (htfMeth == "Inputs" ? (buff) : 
+  (na))
+
+//SIGNALS
+htfrsiLong = usersiOBS ? htfrsi <= rsiOB : htfrsi >= 50
+htfrsiShort = usersiOBS ? htfrsi >= rsiOS : htfrsi <= 50
+
+//}
+//SIGNALS ==> htfrsiLong, htfrsiShort
+
+//}
+
+//*************** TRADING SESSIONS ***************//
+//{
+
+useSess = input(true, "Filter Trade by Session?")
+whatSess = input("Custom", "What Trading Session? ", options = ["Custom", "Sydney", "Tokyo", "London", "New York"])
+sessCust  = input("0500-1600", "Custom Session", input.session)
+
+// InSession() determines if a price bar falls inside the specified session
+InSession(sess) => na(time(timeframe.period, sess)) == false
+
+sessSyd = "2200-0700"
+sessTok = "0000-0900"
+sessLon = "0800-1700"
+sessNY = "1300-2200"
+
+sess = whatSess == "Custom" ? (sessCust) : 
+  (whatSess == "Sydney" ? (sessSyd) : 
+  (whatSess == "Tokyo" ? (sessTok) : 
+  (whatSess == "New York" ? (sessNY) : 
+  (na)  ) ) )  
+  
+inSession = InSession(sess) //returns true if current bar is within desired session
+
+//}
+//SIGNAL ==> inSession
+
+//*************** STRATEGY EXECUTION ***************//
+//{
+
+triggerLong = crossover(close, ema(close, 5))
+triggerShort = crossunder(close, ema(close, 5))
+
+goLong = triggerLong and inSession and maLong and stLong and rsiLong and macdLong and htfmaLong and htfstLong and htfrsiLong
+
+goShort = triggerShort and inSession and maShort and stShort and rsiShort and macdShort and htfmaShort and htfstShort and htfrsiShort
+
+//}
+
+//*************** PLOTS ***************//
+plotshape(goLong, "Long", shape.triangleup, location.belowbar, color.lime, size = size.small)
+plotshape(goShort, "Short", shape.triangledown, location.abovebar, color.maroon, size = size.small)
