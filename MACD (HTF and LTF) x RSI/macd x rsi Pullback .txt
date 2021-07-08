@@ -1,0 +1,106 @@
+//THE STRATEGY HAS GOOD, EARLY ENTRIES, BUT NEEDS A WAY TO FILTER OUT ENTRIES BASED ON TREND DIRECTIONS
+
+//IDEAS
+// - Find Entries on only pullbacks 
+// - Use wide gaps in Higher Timeframe selection (HTF= 4H, Trading TF= M5)
+
+
+// © Jerry
+
+//@version=4
+study("MACD x RSI Study", shorttitle="MACD x RSI", overlay=1)
+
+//MACD
+//{
+
+// INPUTS
+macdSrc = input(close, "MACD Source", input.source, group="MACD")
+macdflen = input(12, "MACD Fast Length", group="MACD")
+macdslen = input(26, "MACD Slow Length", group="MACD")
+siglen = input(9, "MACD Signal Line", group="MACD")
+
+//CALCULATIONS
+[macd, signal, hist] = macd(macdSrc, macdflen, macdslen, siglen)
+  
+macdLong = crossover(macd, signal) and macd < 0
+macdShort = crossunder(macd, signal) and macd > 0
+
+//}
+
+//*************** HTF MACD ***************//
+//{
+// INPUTS
+
+htfMacdRes     = input("240", "HTF MACD TimeFrame", input.resolution, group="HTF MACD")
+
+// FUNCTIONS
+//{
+htf_macd() =>
+    htfFastMa = sma(macdSrc, macdflen)
+    htfSlowMa = sma(macdSrc, macdslen)
+    htfMacd    = htfFastMa - htfSlowMa
+    htfSignal  = sma(htfMacd, siglen)
+    htfMacd
+    
+htf_signal() =>
+    // Calculating
+    htfFastMa = sma(macdSrc, macdflen)
+    htfSlowMa = sma(macdSrc, macdslen)
+    htfMacd    = htfFastMa - htfSlowMa
+    htfSignal  = sma(htfMacd, siglen)
+    htfSignal 
+
+htf_color() =>
+    // Calculating
+    htfFastMa = sma(macdSrc, macdflen)
+    htfSlowMa = sma(macdSrc, macdslen)
+    htfMacd    = htfFastMa - htfSlowMa
+    htfSignal  = sma(htfMacd, siglen)
+    htfHist    = htfMacd - htfSignal
+    (hist>=0 ? (hist[1] < hist ? #26A69A : #B2DFDB) : (hist[1] < hist ? #FFCDD2 : #EF5350) )
+
+
+//}
+// Calculate variables on higher timeframe    
+htfMacd   = security(syminfo.tickerid, htfMacdRes, htf_macd())
+htfSignal = security(syminfo.tickerid, htfMacdRes, htf_signal())
+mcolor = security(syminfo.tickerid, htfMacdRes, htf_color())
+
+// Caclulate HTF Hist 
+htfHist    = htfMacd - htfSignal
+htfHistDir = (htfHist>=0 ? (htfHist[1] < htfHist ? "Inc Long" : "Dec Long") : (htfHist[1] < htfHist ? "Dec Short" : "Inc Short") )
+
+// SIGNALS 
+htfMacdLong = mcolor == #FFCDD2
+htfMacdShort = mcolor == #B2DFDB
+
+//}-----End of HTF MACD
+
+//RSI
+//{
+
+//INPUTS 
+rsiSrc = input(close, "RSI Source", input.source, group="RSI")
+rsiLen = input(14, "RSI Length", group="RSI")
+rsiRes = input("120", "RSI Timeframe", input.resolution, group="RSI")
+rsiOb  = input(60, "RSI Overbought", group="RSI")
+rsiOs  = input(40, "RSI Oversold", group="RSI")
+
+rsi = security(syminfo.tickerid, rsiRes, rsi(rsiSrc, rsiLen), barmerge.gaps_off, barmerge.lookahead_off)
+
+rsiShort = rsi >= rsiOb
+rsiLong = rsi <= rsiOs
+//}
+
+//ENTRY RULES
+//{
+goLong = htfMacdLong and rsiLong and macdLong
+goShort = htfMacdShort and rsiShort and macdShort
+//}
+
+//PLOTS
+//{
+plotshape(goLong, "Long", shape.triangleup, location.belowbar, color.lime, size = size.small)
+plotshape(goShort, "Short", shape.triangledown, location.abovebar, color.maroon, size = size.small)
+//}
+

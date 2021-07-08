@@ -1,0 +1,13 @@
+1. The rules for the dark blue circle and light blue circles have been interchanged. The calculation is correct but it is showing  dark blue when it should be showing light blue, and that is messing with the Squueze Momentum entry rule. So, please make the necessary changes to the colors. 
+
+2. When you have corrected that, please review the rule of the Squeeze Momentum. The indicator should only enter when there is a light blue circle [the correct light blue color] and an increasing (light green or light red) histogram.
+
+3. For the multiple arrows, I believe you would fix that when you are adding the other features. The indicator should only show one arrow per entry.
+
+It would be nice if you can deliver these corrections by 12pm , like you did today. The client has already had a lot of delay.
+
+When you have done this, I will confirm to you how it performs, and you can go ahead in adding the remaining features.
+
+Thanks for the good work
+
+

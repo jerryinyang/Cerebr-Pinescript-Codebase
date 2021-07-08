@@ -1,0 +1,95 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © Cerebr
+
+//@version=4
+strategy("SM and MACD", overlay=0, pyramiding = 1)
+
+//Squeeze Momentum { 
+length = input(20, title="BB Length", group = "Squeeze Momentum")
+mult = input(2.0,title="BB MultFactor", group = "Squeeze Momentum")
+lengthKC=input(20, title="KC Length", group = "Squeeze Momentum")
+multKC = input(1.5, title="KC MultFactor", group = "Squeeze Momentum")
+
+useTrueRange = input(true, title="Use TrueRange (KC)", type=input.bool)
+
+// Calculate BB
+source = close
+basis = sma(source, length)
+dev = mult * stdev(source, length)
+upperBB = basis + dev
+lowerBB = basis - dev
+
+// Calculate KC
+ma = sma(source, lengthKC)
+range = useTrueRange ? tr : (high - low)
+rangema = sma(range, lengthKC)
+upperKC = ma + rangema * multKC
+lowerKC = ma - rangema * multKC
+
+sqzOn  = (lowerBB > lowerKC) and (upperBB < upperKC)
+sqzOff = (lowerBB < lowerKC) and (upperBB > upperKC)
+noSqz  = (sqzOn == false) and (sqzOff == false)
+
+val = linreg(source  -  avg(avg(highest(high, lengthKC), lowest(low, lengthKC)),sma(close,lengthKC)), lengthKC,0)
+
+bcolor = iff( val > 0, iff( val > nz(val[1]), #00FF00, #008000),iff( val < nz(val[1]), #FF0000, #800000))
+  
+scolor = noSqz ? #0000FF : sqzOn ? #0000FF : color.blue 
+
+plot(val, color=bcolor, style=plot.style_histogram, linewidth=4)
+plot(0, color=scolor, style=plot.style_circles, linewidth=2)
+
+//SIGNALS
+sqzEnt = scolor[2] == #0000FF and scolor[1] == color.blue
+sqzDir = bcolor == #00FF00 ? "Buy" : bcolor == #FF0000 ? "Sell" : na
+sqzBE = bcolor == #008000 ? "BE Buy" : bcolor == #800000 ? "BE Sell" : na
+
+//}----- End of Squeeze Momentum
+//Signals ==> sqzEnt (True or False), sqzDir ("Buy" or "Sell"), and sqzBE ("BE Buy" and "BE Sell")
+
+//MACD {
+
+macdsrc = input(close, "Source", group = "MACD")
+macdflen = input(12, "Fask MA", group = "MACD")
+macdslen = input(26, "Slow MA", group = "MACD")
+siglen = input(13, "Signal Line", input.integer, group = "MACD")
+showHist = input(false, "Show MACD Histogram", group = "MACD")
+Filt = input(false, "Use MACD Advanced Filter", group = "MACD")
+
+[macd, signal, hist] = macd(macdsrc, macdflen, macdslen, siglen)
+
+//PLOTS
+plot(macd, "MACD Line", color.lime)
+plot(signal, "Signal Line", color.maroon)
+plot(showHist ? hist : na, "MACD Histogram", color.white)
+
+//SIGNALS
+macdBuy = 
+  Filt == true ? crossover(macd, signal) and macd < 0 :
+  macd > signal
+  
+macdSell = 
+  Filt == true ? crossunder(macd, signal) and macd > 0 :
+  macd < signal
+//}----- End of MACD
+//Signals ==> macdBuy and macdSell
+
+//Strategy Executions {
+longCondition = sqzEnt and sqzDir == "Buy" and macdBuy
+if (longCondition)
+    strategy.entry("Long", strategy.long)
+
+shortCondition = sqzEnt and sqzDir == "Sell" and macdSell
+if (shortCondition)
+    strategy.entry("Short", strategy.short)
+
+atr = atr(20)
+
+tp = 
+  sqzDir == "Buy" ? strategy.position_avg_price + (3 * atr) :
+  sqzDir == "Sell" ? strategy.position_avg_price - (1.5 * atr) :
+  na
+
+strategy.exit("Trade Exit", sqzDir == "Buy" ? "Long" : "Short", limit = tp)
+
+//}

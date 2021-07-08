@@ -1,0 +1,48 @@
+//***************  MACD ***************//
+//{
+/// INPUTS ///
+
+Res     = input("240", " MACD TimeFrame", input.resolution)
+
+////////////////
+// FUNCTIONS ///
+//{
+_macd() =>
+    macdSrc     = close
+    FastMa = sma(macdSrc, macdflen)
+    SlowMa = sma(macdSrc, macdslen)
+    Macd    = FastMa - SlowMa
+    Signal  = sma(Macd, siglen)
+    Macd
+    
+_signal() =>
+    // Calculating
+    macdSrc     = close
+    FastMa = sma(macdSrc, macdflen)
+    SlowMa = sma(macdSrc, macdslen)
+    Macd    = FastMa - SlowMa
+    Signal  = sma(Macd, siglen)
+    Signal 
+
+_color() =>
+    // Calculating
+    macdSrc     = close
+    FastMa = sma(macdSrc, macdflen)
+    SlowMa = sma(macdSrc, macdslen)
+    Macd    = FastMa - SlowMa
+    Signal  = sma(Macd, siglen)
+    hist    = Macd - Signal
+    (hist>=0 ? (hist[1] < hist ? #26A69A : #B2DFDB) : (hist[1] < hist ? #FFCDD2 : #EF5350) )
+
+
+//}
+// Calculate variables on higher timeframe    
+Macd   = security(syminfo.tickerid, Res, _macd())
+Signal = security(syminfo.tickerid, Res, _signal())
+mcolor = security(syminfo.tickerid, Res, _color())
+
+// Caclulate hist 
+hist    = Macd - Signal
+histDir = (hist>=0 ? (hist[1] < hist ? "Inc Long" : "Dec Long") : (hist[1] < hist ? "Inc Short" : "Dec Short") )
+
+//}-----End of  MACD

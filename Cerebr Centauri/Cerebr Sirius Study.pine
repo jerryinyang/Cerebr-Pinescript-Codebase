@@ -1,0 +1,15 @@
+study(title='Cerebr Sirius Study', shorttitle='Sirius', overlay=true)
+
+//INDICATORS
+//HMA, HTF 1 HOUR
+//SUPERTREND, HTF 30 MINS
+//MACD, 15 MINS OR 5 MINS
+//VU MAN CHU OR SQUUEZE MOMENTUM, 15 MINS OR 5 MINS
+
+//HULL MOVING AVERAGE
+hmares = input(defval="60", title='HMA Timeframe', type=input.resolution)
+hmaSrc = input(defval=close, title='HMA Source', type=input.source)
+hmaLen = input(defval=30, title='HMA Length', type=input.integer)
+
+hma = security(syminfotickerid, resolution=, expression=, gaps=barmerge.gaps_on, lookahead=barmerge.lookahead_on) 
+hma(hmaSrc, hmaLen)

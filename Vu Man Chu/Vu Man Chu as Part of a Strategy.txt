@@ -1,0 +1,109 @@
+
+//@version=4
+
+study(title = 'VuManChu B Divergences', shorttitle = 'VMC Cipher_B_Divergences')
+
+// PARAMETERS {
+
+vmcUseHTF = input(false, "Use Higher Timeframe")
+vmcRes = input("240", "Higher Timeframe", input.resolution)
+useVMCObOS = input(false, "Use VMC Ob/Os? ")
+
+// WaveTrend
+wtShow = input(true, title = 'Show WaveTrend', type = input.bool)
+wtBuyShow = input(true, title = 'Show Buy dots', type = input.bool)
+wtSellShow = input(true, title = 'Show Sell dots', type = input.bool)
+wtChannelLen = input(9, title = 'WT Channel Length', type = input.integer)
+wtAverageLen = input(12, title = 'WT Average Length', type = input.integer)
+wtMASource = input(hlc3, title = 'WT MA Source', type = input.source)
+wtMALen = input(3, title = 'WT MA Length', type = input.integer)
+
+// WaveTrend Overbought & Oversold lines
+obLevel = input(53, title = 'WT Overbought Level 1', type = input.integer)
+obLevel2 = input(60, title = 'WT Overbought Level 2', type = input.integer)
+obLevel3 = input(100, title = 'WT Overbought Level 3', type = input.integer)
+osLevel = input(-53, title = 'WT Oversold Level 1', type = input.integer)
+osLevel2 = input(-60, title = 'WT Oversold Level 2', type = input.integer)
+osLevel3 = input(-75, title = 'WT Oversold Level 3', type = input.integer)
+
+
+// RSI+MFI
+rsiMFIShow = input(true, title = 'Show MFI', type = input.bool)
+rsiMFIperiod = input(60,title = 'MFI Period', type = input.integer)
+rsiMFIMultiplier = input(150, title = 'MFI Area multiplier', type = input.float)
+rsiMFIPosY = input(2.5, title = 'MFI Area Y Pos', type = input.float)
+
+
+// COLORS {
+colorRed = #ff0000
+colorPurple = #e600e6
+colorGreen = #3fff00
+colorOrange = #e2a400
+colorYellow = #ffe500
+colorWhite = #ffffff
+colorPink = #ff00f0
+colorBluelight = #31c0ff
+
+colorWT1 = #90caf9
+colorWT2 = #0d47a1
+
+colorWT2_ = #131722
+
+colormacdWT1a = #4caf58
+colormacdWT1b = #af4c4c
+colormacdWT1c = #7ee57e
+colormacdWT1d = #ff3535
+
+colormacdWT2a = #305630
+colormacdWT2b = #310101
+colormacdWT2c = #132213
+colormacdWT2d = #770000
+
+//}
+
+// } PARAMETERS
+
+// FUNCTIONS {
+
+ // RSI+MFI
+f_rsimfi(_period, _multiplier, _tf) => security(syminfo.tickerid, _tf, sma(((close - open) / (high - low)) * _multiplier, _period) - rsiMFIPosY)  
+
+ // WAVETREND
+f_wavetrend(src, chlen, avg, malen, tf) =>
+    tfsrc = security(syminfo.tickerid, tf, src)
+    esa = ema(tfsrc, chlen)
+    de = ema(abs(tfsrc - esa), chlen)
+    ci = (tfsrc - esa) / (0.015 * de)
+    wt1 = security(syminfo.tickerid, tf, ema(ci, avg))
+    wt2 = security(syminfo.tickerid, tf, sma(wt1, malen))
+    wtOversold = wt2 <= osLevel
+    wtOverbought = wt2 >= obLevel
+    wtCross = cross(wt1, wt2)
+    wtCrossUp = wt2 - wt1 <= 0
+    wtCrossDown = wt2 - wt1 >= 0
+    wtCrosslast = cross(wt1[2], wt2[2])
+    wtCrossUplast = wt2[2] - wt1[2] <= 0
+    wtCrossDownlast = wt2[2] - wt1[2] >= 0
+    [wt1, wt2, wtOversold, wtOverbought, wtCross, wtCrossUp, wtCrossDown, wtCrosslast, wtCrossUplast, wtCrossDownlast]
+    
+//}
+
+
+// CALCULATION {
+
+// RSI + MFI Area
+rsiMFI = f_rsimfi(rsiMFIperiod, rsiMFIMultiplier, vmcUseHTF ? vmcRes : timeframe.period)
+
+// Calculates WaveTrend
+[wt1, wt2, wtOversold, wtOverbought, wtCross, wtCrossUp, wtCrossDown, wtCross_last, wtCrossUp_last, wtCrossDown_last] = 
+  f_wavetrend(wtMASource, wtChannelLen, wtAverageLen, wtMALen, vmcUseHTF ? vmcRes : timeframe.period)
+
+//Vumanchu Signals
+vmcMF = rsiMFI < 0 ? "Short" : "Long"								 
+vmcLong = useVMCObOS ? wtCross and wtCrossUp and wtOversold and wt1 < 0 and wt2 < 0 : wtCross and wtCrossUp and wt1 < 0 and wt2 < 0 
+vmcShort = useVMCObOS ? wtCross and wtCrossDown and wtOverbought and wt1 > 0 and wt2 > 0 : wtCross and wtCrossDown and wt1 > 0 and wt2 > 0
+ 
+// }
+//SIGNALS ==> vmcLong, vmcShort, vmcMF ("Long" or "Short")
+
+plot(na)

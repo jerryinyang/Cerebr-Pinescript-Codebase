@@ -1,0 +1,223 @@
+// © Cerebr
+
+//@version=4
+// study("Cerebr", overlay = 1)
+strategy("Cerebr", overlay = 0, pyramiding = 1)
+
+//Main Inputs {
+useHma = input(true, "Apply HMA", input.bool, group="MAIN")
+useST = input(true, "Apply SuperTrend", input.bool, group="MAIN")
+useMACD = input(true, "Apply MACD", input.bool, group="MAIN")
+signalOnly = input(true, "Show Only Signals")
+//}----- End of Main Inputs
+
+
+//HMA MTF {
+hmaSrc = input(close, "HMA Source", group = "HMA")
+hmaLen = input(20, "HMA Period", group = "HMA")
+hmaRes = input("D", "HMA Timeframe", input.resolution, group = "HMA")
+period = input(1, "Rise or Fall Period", input.integer, group = "HMA")
+//*************************************************//
+hma = security(syminfo.tickerid, hmaRes, hma(hmaSrc, hmaLen), barmerge.gaps_off, barmerge.lookahead_off)
+hmaUp = rising(hma, period)
+hmaDown = falling(hma, period)
+//*************************************************//
+plot(signalOnly ? na : hma, "HMA", color = hmaDown ? color.red : hmaUp ? color.green : na, style = plot.style_circles)
+
+//}----- End of HMA 
+//Signals ==> hmaDown and hmaUp
+
+
+//Supertrend {
+
+stLen = input(10, "Supertrend Length", input.integer, group = "Supertrend")
+stMult = input(3, "SuperTrend Multiplier", input.integer, group = "Supertrend")
+
+[st, dir] = supertrend(stMult, stLen)
+
+stLong = dir == 1
+stShort = dir == -1
+
+
+stPlot = plot(
+  signalOnly == true ? na : st, title = "Supertrend", 
+  color = dir == -1 ? color.new(color.green , 20) : 
+  color.new(color.red, 20), linewidth = 2,  
+  style = plot.style_linebr)
+
+cPlot = plot(close, display = 0)
+fill(cPlot, stPlot, color = dir == -1 ? color.new(color.green , 95) : color.new(color.red, 95), title = "Supertrend Background")
+//}----- End of SuperTrend
+//Signals ==> stLong and stShort
+
+
+//MACD {
+
+macdSrc = input(close, "MACD Source", input.source, group = "MACD")
+macdFastLen = input(12, "Fast MA", group = "MACD")
+macdSlowLen = input(21, "Slow MA", group = "MACD")
+macdSigLen = input(9, "Signal Line", group = "MACD")
+//***********************************************//
+[macd, signal, hist] = macd(macdSrc, macdFastLen, macdSlowLen, macdSigLen)
+
+macdBuy = macd > signal
+macdSell = signal > macd
+
+//}----- End of MACD
+//Signals ==> macdBuy and macdSell
+
+
+// //Squeeze Momentum { 
+
+// length = input(20, title="BB Length", group = "Squeeze Momentum")
+// mult = input(2.0,title="BB MultFactor", group = "Squeeze Momentum")
+// lengthKC=input(20, title="KC Length", group = "Squeeze Momentum")
+// multKC = input(1.5, title="KC MultFactor", group = "Squeeze Momentum")
+
+// useTrueRange = input(true, title="Use TrueRange (KC)")
+
+// // Calculate BB
+// source = close
+// basis = sma(source, length)
+// dev = mult * stdev(source, length)
+// upperBB = basis + dev
+// lowerBB = basis - dev
+
+// // Calculate KC
+// ma = sma(source, lengthKC)
+// range = useTrueRange ? tr : (high - low)
+// rangema = sma(range, lengthKC)
+// upperKC = ma + rangema * multKC
+// lowerKC = ma - rangema * multKC
+
+// sqzOn  = (lowerBB > lowerKC) and (upperBB < upperKC)
+// sqzOff = (lowerBB < lowerKC) and (upperBB > upperKC)
+// noSqz  = (sqzOn == false) and (sqzOff == false)
+
+// val = linreg(source  -  avg(avg(highest(high, lengthKC), lowest(low, lengthKC)),sma(close,lengthKC)), lengthKC,0)
+
+// buyStrong = val > 0 and val > val[1]
+// buyWeak = val > 0 and val < val[1]
+// sellStrong = val < 0 and val < val[1]
+// sellWeak = val < 0 and val > val[1]
+
+// //}----- End of Squeeze Momentum
+// //Signals ==> sqzOn, sqzOff, buyStrong, buyWeak, sellStrong, sellWeak
+
+//Alternative Squeeze Momentum { 
+length = input(20, title="BB Length", group = "Squeeze Momentum")
+mult = input(2.0,title="BB MultFactor", group = "Squeeze Momentum")
+lengthKC=input(20, title="KC Length", group = "Squeeze Momentum")
+multKC = input(1.5, title="KC MultFactor", group = "Squeeze Momentum")
+
+useTrueRange = input(true, title="Use TrueRange (KC)", type=input.bool)
+
+// Calculate BB
+source = close
+basis = sma(source, length)
+dev = multKC * stdev(source, length)
+upperBB = basis + dev
+lowerBB = basis - dev
+
+// Calculate KC
+ma = sma(source, lengthKC)
+range = useTrueRange ? tr : (high - low)
+rangema = sma(range, lengthKC)
+upperKC = ma + rangema * multKC
+lowerKC = ma - rangema * multKC
+
+sqzOn  = (lowerBB > lowerKC) and (upperBB < upperKC)
+sqzOff = (lowerBB < lowerKC) and (upperBB > upperKC)
+noSqz  = (sqzOn == false) and (sqzOff == false)
+
+val = linreg(source  -  avg(avg(highest(high, lengthKC), lowest(low, lengthKC)),sma(close,lengthKC)), lengthKC,0)
+
+bcolor = iff( val > 0, iff( val > nz(val[1]), #00FF00, #008000),iff( val < nz(val[1]), #FF0000, #800000))
+  
+scolor = noSqz ? #0000FF : sqzOn ? #0000FF : color.blue 
+
+plot(val, color=bcolor, style=plot.style_histogram, linewidth=4)
+plot(0, color=scolor, style=plot.style_circles, linewidth=2)
+
+//SIGNALS
+sqzEnt = scolor[2] == #0000FF and scolor[1] == color.blue
+sqzDir = bcolor == #00FF00 ? "Buy" : bcolor == #FF0000 ? "Sell" : na
+sqzBE = bcolor == #008000 ? "BE Buy" : bcolor == #800000 ? "BE Sell" : na
+
+//}----- End of Squeeze Momentum
+//Signals ==> sqzEnt (True or False), sqzDir ("Buy" or "Sell"), and sqzBE ("BE Buy" and "BE Sell")
+
+
+//Algorithm For Entry Signal Generation {
+
+entLong = 
+  useHma and useST and useMACD ? hmaUp and stLong and macdBuy and sqzEnt and sqzDir == "Buy" : 
+  useHma and useST ? hmaUp and stLong and sqzEnt and sqzDir == "Buy" :
+  useHma and useMACD ? hmaUp and macdBuy and sqzEnt and sqzDir == "Buy" :
+  useST and useMACD ? stLong and macdBuy and sqzEnt and sqzDir == "Buy" :
+  useHma ? hmaUp and sqzEnt and sqzDir == "Buy" :
+  useST ? stLong and sqzEnt and sqzDir == "Buy" :
+  useMACD ? macdBuy and sqzEnt and sqzDir == "Buy" : 
+  sqzEnt and sqzDir == "Buy"
+
+entShort = 
+  useHma and useST and useMACD ? hmaDown and stShort and macdSell and sqzEnt and sqzDir == "Sell" : 
+  useHma and useST ? hmaDown and stShort and sqzEnt and sqzDir == "Sell" :
+  useHma and useMACD ? hmaDown and macdSell and sqzEnt and sqzDir == "Sell" :
+  useST and useMACD ? stShort and macdSell and sqzEnt and sqzDir == "Sell" :
+  useHma ? hmaDown and sqzEnt and sqzDir == "Sell" :
+  useST ? stShort and sqzEnt and sqzDir == "Sell" :
+  useMACD ? macdSell and sqzEnt and sqzDir == "Sell" :
+  sqzEnt and sqzDir == "Sell"
+
+//}----- End of Entry Algorithm
+
+//Algorithm For Exit Signal Generation {
+//SuperTrend Exits
+stExitLong = stLong[1] == true and stLong == false and stShort == true
+stExitShort = stShort[1] == true and stShort == false and stLong == true
+
+//MACD Exits
+macdExitLong = crossunder(macd, signal)
+macdExitShort = crossover(macd, signal)
+
+//Squeeze Momentum Indicator Exits
+sqzChange = sqzOff[1] == true and sqzOff == false and sqzOn == true
+sqzExitLong = val[1] > 0 and val <= 0 
+sqzExitShort = val[1] < 0 and val >= 0
+
+//Exits
+exitLong = 
+  useST and useMACD ? stExitLong or macdExitLong or sqzChange or sqzExitLong :
+  useST ? stExitLong or sqzChange or sqzExitLong :
+  useMACD ? macdExitLong or sqzChange or sqzExitLong : 
+  sqzChange or sqzExitLong
+  
+exitShort = 
+  useST and useMACD ? stExitShort or macdExitShort or sqzChange or sqzExitShort :
+  useST ? stExitShort or sqzChange or sqzExitShort :
+  useMACD ? macdExitShort or sqzChange or sqzExitShort : 
+  sqzChange or sqzExitShort
+  
+//}----- End of Exit Algorithms
+
+
+//PLOTS FOR STUDY {
+
+// plotshape(entLong, "Long", location = location.belowbar, style = shape.triangleup, size = size.small)
+// plotshape(entShort, "Short", location = location.abovebar, style = shape.triangledown, size = size.small)
+
+//}----- End of Plots
+
+//STRATEGY EXECUTIONS {
+
+//ENTRIES
+strategy.entry("Long Entry", long = true, when = entLong)
+// strategy.entry("Short Entry", long = false, when = entShort)
+
+
+//EXITS
+strategy.close("Long Entry", when = exitLong)
+// strategy.close("Short Entry", when = exitShort)
+
+//}-----End of Strategy Functions

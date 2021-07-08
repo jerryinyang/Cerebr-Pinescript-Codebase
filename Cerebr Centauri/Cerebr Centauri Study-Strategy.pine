@@ -1,20 +1,17 @@
 // This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
-// © Jerry
+// Â© Cerebr
 
 //@version=4
-study("Cerebr Centauri", overlay = true)
+strategy("Cerebr Centauri Strategy", shorttitle="Centauri Study", overlay=true, margin_long=100, margin_short=100, default_qty_value = 5000)
+// study("Cerebr Centauri Study", shorttitle="Centauri Study", overlay=true)
+
 //General Inputs
 //{
-res = input("240", "Higher Timeframe", input.resolution)
-htfMeth = input("Inputs", "HTF Method?", options = ["Data Import", "TF Conversion", "Inputs"])
-gapsOn = input(false, "Bar Merge On?")
-
-slType = input("Trailing Stop", "Stop Loss Calculation", options = ["Pips", "Trailing Stop"], group = "Risk Management")
-slPip = input(40, "Stop Loss In Pips", group = "Risk Management")
-
-tpType = input("Risk to Reward", "Take Profit Calculation", options = ["Risk to Reward", "Pips"], group = "Risk Management")
-rrr = input(2, "Reward - Risk Ratio", group = "Risk Management")
-tpPip = input(100, "Take Profit Pips", group = "Risk Management")
+res = input("240", "Higher Timeframe", input.resolution, group = "General Settings")
+htfMeth = input("Inputs", "HTF Method?", options = ["Data Import", "TF Conversion", "Inputs"], group = "General Settings")
+gapsOn = input(false, "Bar Merge On?", group = "General Settings")
+exMeth = input("Exit Rules", "Position Exit Method", options = ["Both", "Exit Rules", "SL, TP, TLS"], group = "General Settings")
+pipMult = input(1, "**Point-Pip Converter**", step = 1, group = "General Settings")
 
 //Period Converter Function
 //{
@@ -280,9 +277,8 @@ sess = whatSess == "Custom" ? (sessCust) :
 inSession = InSession(sess) //returns true if current bar is within desired session
 
 //}
-//SIGNAL ==> inSession
 
-//*************** STRATEGY EXECUTION ***************//
+//*************** ENTRY RULES ***************//
 //{
 
 triggerLong = crossover(close, ema(close, 5))
@@ -294,6 +290,172 @@ goShort = triggerShort and inSession and maShort and stShort and rsiShort and ma
 
 //}
 
-//*************** PLOTS ***************//
+//*************** EXITS RULES  ***************//
+//{
+
+//HTF EXITS
+//{
+
+//Long Exits
+htfExitStochLong = crossover(htfstoch, stOB) or crossunder(htfstoch, htfstSma) //STOCHASTIC
+htfExitRsiLong = crossover(htfrsi, rsiOB) //RSI
+htfExitMaLong = crossunder(htffastMa, htfslowMa) //MOVING AVERAGE CROSSOVER
+
+//Short Exits
+htfExitStochShort = crossunder(htfstoch, stOS) or crossover(htfstoch, htfstSma) //STOCHASTIC
+htfExitRsiShort = crossunder(htfrsi, rsiOS) //RSI
+htfExitMaShort = crossover(htffastMa, htfslowMa) //MOVING AVERAGE CROSSOVER
+
+htfExitLong = htfExitMaLong or htfExitRsiLong or htfExitStochLong
+htfExitShort = htfExitMaShort or htfExitRsiShort or htfExitStochShort
+//}
+
+//LTF EXITS (Optional)
+//{
+
+//INPUTS
+useExStoch = input(defval=false, title='Stoch Exit', type=input.bool, inline = "exit1")
+useExRsi = input(defval=false, title='RSI Exit', type=input.bool, inline = "exit1")
+useExMa = input(defval=false, title='MA Exit', type=input.bool, inline = "exit2")
+useExMacd = input(defval=false, title='MACD Exit', type=input.bool, inline = "exit2")
+
+//Long Exits
+exitStochLong = crossover(stoch, stOB) or crossunder(stoch, stSma) //STOCHASTIC
+exitRsiLong = crossover(rsi, rsiOB) //RSI
+exitMaLong = crossunder(fastMa, slowMa) //MOVING AVERAGE CROSSOVER
+exitMacdLong = macdShort
+
+//Short Exits
+exitStochShort = crossunder(stoch, stOS) or crossover(stoch, stSma) //STOCHASTIC
+exitRsiShort = crossunder(rsi, rsiOS) //RSI
+exitMaShort = crossover(fastMa, slowMa) //MOVING AVERAGE CROSSOVER
+exitMacdShort = macdLong
+//}
+
+//EXIT EXECUTIONS
+//{
+exitLong = 
+  useExMa and useExMacd and useExStoch and useExRsi ? htfExitLong or exitMaLong or exitMacdLong or exitStochLong or exitRsiLong : 
+  
+  useExMacd and useExStoch and useExRsi ? htfExitLong or exitMacdLong or exitStochLong or exitRsiLong : 
+  useExMa and useExStoch and useExRsi ? htfExitLong or exitMaLong or exitStochLong or exitRsiLong : 
+  useExMa and useExMacd and useExRsi ? htfExitLong or exitMaLong or exitMacdLong or exitRsiLong : 
+  useExMa and useExMacd and useExStoch ? htfExitLong or exitMaLong or exitMacdLong or exitStochLong :
+
+  useExMa and useExMacd ? htfExitLong or exitMaLong or exitMacdLong : 
+  useExMa and useExStoch ? htfExitLong or exitMaLong or exitStochLong : 
+  useExMa and useExRsi ? htfExitLong or exitMaLong or exitRsiLong : 
+  useExMacd and useExStoch ? htfExitLong or exitMacdLong or exitStochLong : 
+  useExMacd and useExRsi ? htfExitLong or exitMacdLong or exitRsiLong : 
+  useExStoch and useExRsi ? htfExitLong or exitStochLong or exitRsiLong : 
+
+  useExMa ? htfExitLong or exitMaLong : 
+  useExMacd ? htfExitLong or exitMacdLong : 
+  useExStoch? htfExitLong or exitStochLong : 
+  useExRsi ? htfExitLong or exitRsiLong : 
+
+  htfExitLong
+
+exitShort = 
+  useExMa and useExMacd and useExStoch and useExRsi ? htfExitShort or exitMaShort or exitMacdShort or exitStochShort or exitRsiShort : 
+  
+  useExMacd and useExStoch and useExRsi ? htfExitShort or exitMacdShort or exitStochShort or exitRsiShort : 
+  useExMa and useExStoch and useExRsi ? htfExitShort or exitMaShort or exitStochShort or exitRsiShort : 
+  useExMa and useExMacd and useExRsi ? htfExitShort or exitMaShort or exitMacdShort or exitRsiShort : 
+  useExMa and useExMacd and useExStoch ? htfExitShort or exitMaShort or exitMacdShort or exitStochShort :
+
+  useExMa and useExMacd ? htfExitShort or exitMaShort or exitMacdShort : 
+  useExMa and useExStoch ? htfExitShort or exitMaShort or exitStochShort : 
+  useExMa and useExRsi ? htfExitShort or exitMaShort or exitRsiShort : 
+  useExMacd and useExStoch ? htfExitShort or exitMacdShort or exitStochShort : 
+  useExMacd and useExRsi ? htfExitShort or exitMacdShort or exitRsiShort : 
+  useExStoch and useExRsi ? htfExitShort or exitStochShort or exitRsiShort : 
+
+  useExMa ? htfExitShort or exitMaShort : 
+  useExMacd ? htfExitShort or exitMacdShort : 
+  useExStoch? htfExitShort or exitStochShort : 
+  useExRsi ? htfExitShort or exitRsiShort : 
+
+  htfExitShort
+//}
+
+//}
+
+//*************** RISK MANAGEMENT  ***************//
+//{
+    
+//Pip Calculator
+//{
+
+pip() => syminfo.mintick * (pow(10, pipMult))
+DistanceToPip(_price1, _price2) => abs(_price1 - _price2) / pip()
+//}
+
+//INPUTS
+//{
+slPips = input(40, "Stop Loss In Pips", group = "Risk Management", minval = 1) * pip()
+
+tslPips = input(40, "Trailing Stop In Pips", group = "Risk Management", minval = 1) * pip()
+useTsl  = input(true, "Use Trailing Stop", group = "Risk Management")
+tslOff = input(0, "TSL Offset", group = "Risk Management")
+
+tpType = input("Pips", "Take Profit Calculation", options = ["Risk to Reward", "Pips"], group = "Risk Management")
+rrr = input(2, "Reward - Risk Ratio", group = "Risk Management", minval = 0.5, step = 0.5)
+tpPip = input(100, "Take Profit Pips", group = "Risk Management", minval = 1) * pip()
+//}
+
+//Calculation
+//{
+sl = slPips 
+
+tsl = useTsl ? tslPips : na
+
+tp = 
+  tpType == "Risk to Reward" ? rrr * slPips :
+  tpType == "Pips" ? tpPip :
+  na
+  
+tslOffset  = tslOff >= 1 ? tslOff : na
+//}
+
+
+//}
+
+//*************** STRATEGY EXECUTION (for Strategy) ***************//
+//{
+strategy.entry("Long", strategy.long, when = goLong)
+strategy.entry("Short", strategy.short, when = goShort)
+
+
+//Exit Method
+if exMeth == "Both" 
+    strategy.close("Long", when = exitLong)
+    strategy.close("Short", when = exitShort)
+    
+    strategy.exit("Exit Long", from_entry = "Long", profit = tp, loss = useTsl == false ? sl : na, trail_points = useTsl ? tsl : na, trail_offset = tslOffset)
+    strategy.exit("Exit Short", from_entry = "Short", profit = tp, loss = useTsl == false ? sl : na, trail_points = useTsl ? tsl : na, trail_offset = tslOffset)
+    
+else if exMeth == "Exit Rules" 
+    strategy.close("Long", when = exitLong)
+    strategy.close("Short", when = exitShort)
+    
+else if exMeth == "SL, TP, TLS" 
+    strategy.exit("Exit Long", from_entry = "Long", profit = tp, loss = useTsl == false ? sl : na, trail_points = useTsl ? tsl : na, trail_offset = tslOffset)
+    strategy.exit("Exit Short", from_entry = "Short", profit = tp, loss = useTsl == false ? sl : na, trail_points = useTsl ? tsl : na, trail_offset = tslOffset)
+
+
+//}
+
+//*************** PLOTS (for Study) ***************//
+//{
+    
 plotshape(goLong, "Long", shape.triangleup, location.belowbar, color.lime, size = size.small)
 plotshape(goShort, "Short", shape.triangledown, location.abovebar, color.maroon, size = size.small)
+
+lastIsShort = barssince(goShort) < barssince(goLong)
+lastIsLong = barssince(goShort) > barssince(goLong)
+
+plotshape(lastIsShort ? exitShort : na, "Exit Short", shape.xcross, location.belowbar, color.lime, size = size.small)
+plotshape(lastIsLong ? exitLong : na, "Exit Long", shape.xcross, location.abovebar, color.maroon, size = size.small)
+
+//}

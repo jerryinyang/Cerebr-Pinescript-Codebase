@@ -1,0 +1,24 @@
+This is a review of the exit rules for the SuperTrend xx Squeeze Momentum EA.
+
+1. SuperTrend Exits: When the supertrend changes to an opposite direction. For example, when the Supertrend changes to 'Sell' during a long position.
+
+2. MACD Exit: When the MACD has an opposite crossover. For example, when the MACD line crosses below the Signal line, during a long position.
+
+3. Squeeze Momentum Exit: 
+  ---- When the Light blue circles changes to dark blue circle.
+
+  ---- The second exit signal is when histogram changes from a green histogram to a red histogram. This happens sometimes without the circles changing to dark blue. So that would be an exit signal.
+
+
+For the breakeven rule, it should be reviewed as follows accordign to the client:
+
+There should be a parameter that allows the user pick what happens when the dark histogram bar appears. There are two options:
+- To Lock a percentage of profits, or
+- To move the stop loss a certain percentage closer to the entry or to breakeven, just like I explained in the first document.
+
+
+That's all the review on those rules.
+
+Please focus on completing the indicator befoer continue the work on the bot. Thanks
+
+

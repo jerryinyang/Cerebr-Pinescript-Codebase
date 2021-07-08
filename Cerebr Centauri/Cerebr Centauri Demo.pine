@@ -1,5 +1,5 @@
 // This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
-// © Jerry
+// ï¿½ Jerry
 
 //@version=4
 strategy("Cerebr Centauri Demo", overlay=true, margin_long=100, margin_short=100, default_qty_value = 10000)

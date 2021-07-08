@@ -1,0 +1,17 @@
+These are the features he explained to me he wants in the indicator.
+
+1. He wants to choose whether it should scan the whole chart or just a number of bars. He says he wants to know how the bot would work in a specific period of time. So there should be a parameter to choose the number of bars, or for "Whole chart".
+
+2. The indicator should also show the exit points of every entry. This way, the user can know which entries ended in Profit or Loss. It should also calculate/display how many pips it went in profit or loss.
+
+3. He wants something like a small dashboard at the top left corner, that will show some information about the indicator's performance. These are the information that will be displayed.
+- Number of Trades: This one will count how many trades/entries the bot will enter.
+- Wins/Losses: The indicator will show how many trades ended in profit or loss. This will help the user calculate the success rate.
+- Wins/Losses in Pips: This will show the total pips in profits and the total pips in loss for all the entries it found
+
+
+I hope you understand these features.
+
+Questions:
+
+1. Will the indicator still work, even though some parts of it will use Multi timeframe?
