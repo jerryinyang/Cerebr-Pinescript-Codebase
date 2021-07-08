@@ -5,7 +5,7 @@
 // - Use wide gaps in Higher Timeframe selection (HTF= 4H, Trading TF= M5)
 
 
-// © Jerry
+// ï¿½ Jerry
 
 //@version=4
 study("MACD x RSI Study", shorttitle="MACD x RSI", overlay=1)
@@ -68,7 +68,6 @@ mcolor = security(syminfo.tickerid, htfMacdRes, htf_color())
 
 // Caclulate HTF Hist 
 htfHist    = htfMacd - htfSignal
-htfHistDir = (htfHist>=0 ? (htfHist[1] < htfHist ? "Inc Long" : "Dec Long") : (htfHist[1] < htfHist ? "Dec Short" : "Inc Short") )
 
 // SIGNALS 
 htfMacdLong = mcolor == #FFCDD2

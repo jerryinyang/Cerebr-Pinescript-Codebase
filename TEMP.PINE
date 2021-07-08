@@ -1,29 +1,7 @@
-wtChannelLen = input(10, "Channel Length")
-wtAvgLen = input(21, "Average Length")
-wtOb1 = input(60, "Over Bought Level 1")
-wtOb2 = input(53, "Over Bought Level 2")
-wtOs1 = input(-60, "Over Sold Level 1")
-wtOs2 = input(-53, "Over Sold Level 2")
- 
-wtSrc = hlc3 
-wtEsa = ema(wtSrc, wtChannelLen)
-d = ema(abs(wtSrc - wtEsa), wtChannelLen)
-ci = (wtSrc - wtEsa) / (0.015 * d)
-tci = ema(ci, wtAvgLen)
- 
-wtLine = tci
-wtSignal = sma(wtLine,4)
-
-
-plot(0, color=gray)
-plot(wtOb1, color=red)
-plot(wtOs1, color=green)
-plot(wtOb2, color=red)
-plot(wtOs2, color=green)
-
-plot(wtLine, color=green)
-plot(wtSignal, color=red)
-plot(wtLine-wtSignal, color=blue, style=area, transp=80)
-plot(cross(wtLine, wtSignal) ? wtSignal : na, color = black , style = circles, linewidth = 3)
-plot(cross(wtLine, wtSignal) ? wtSignal : na, color = (wtSignal - wtLine > 0 ? red : lime) , style = circles, linewidth = 2)
-barcolor(cross(wtLine, wtSignal) ? (wtSignal - wtLine > 0 ? aqua : yellow) : na)
+filterShort = useFilter ? (useSt and useMacd and useRsi ? stShort and htfMacdShort and rsiShort :
+  useSt and useRsi ? stShort and rsiShort : 
+  useRsi and useMacd ? rsiShort and htfMacdShort : 
+  useSt and useMacd ? stShort and htfMacdShort : 
+  useSt ? stShort : 
+  useMacd ? htfMacdShort : 
+  useRsi ? rsiShort) : false

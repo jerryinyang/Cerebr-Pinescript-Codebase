@@ -1,0 +1,227 @@
+// © Jerry
+
+//@version=4
+study("Cerebr Wave", overlay=true)
+
+//************** INDICATORS ***************//
+// {
+
+// HTF KELTNER CHANNEL
+// {
+htfKCRes = input("240", "HTF Timeframe", input.resolution, inline="kc11", group="HTF KELTNER CHANNEL")
+htfKCSrc = input(close, "Source", inline="kc11", group="HTF KELTNER CHANNEL")
+htfKCLength = input(50, "HTF Length", inline="kc12", group="HTF KELTNER CHANNEL")
+htfKCMult = input(1, "HTF Multiplier", input.float, step=0.25, minval=0.25, inline="kc12", group="HTF KELTNER CHANNEL")
+htfKCRange = input("ATR", "Range Style", options=["ATR", "True Range", "Bar Width"], inline="kc13", group="HTF KELTNER CHANNEL")
+htfKCRangeLen = input(14, "Range Period", inline="kc13", group="HTF KELTNER CHANNEL")
+
+f_kc(src, length, mult, kcRange, rangeLen, res) =>
+    float basis = security(syminfo.tickerid, res, ema(src, length), barmerge.gaps_off, barmerge.lookahead_off)
+    float span = kcRange == "ATR" ? security(syminfo.tickerid, res, atr(rangeLen), barmerge.gaps_off, barmerge.lookahead_off) : 
+      kcRange == "True Range" ? security(syminfo.tickerid, res, tr, barmerge.gaps_off, barmerge.lookahead_off) : 
+      kcRange == "Bar Width" ? security(syminfo.tickerid, res, (high - low), barmerge.gaps_off, barmerge.lookahead_off) : na
+      
+    float rangeEma = ema(span, length)
+    
+    security(syminfo.tickerid, res, (high - low), barmerge.gaps_off, barmerge.lookahead_off)
+    
+    
+    upperKC = basis + (rangeEma * mult)
+    middleKC = basis
+    lowerKC = basis - (rangeEma * mult)
+    
+    [middleKC, upperKC, lowerKC]
+    
+    
+[htfKCMiddle, htfKCUpper, htfKCLower] = f_kc(htfKCSrc, htfKCLength, htfKCMult, htfKCRange, htfKCRangeLen, htfKCRes)
+
+//}
+////SIGNALS ==> htfKCMiddle, htfKCUpper, htfKCLower
+
+//LTF KELTNER CHANNEL
+// {
+ltfKCRes = input("30", "LTF Timeframe", input.resolution, inline="kc21", group="LTF KELTNER CHANNEL")
+ltfKCSrc = input(close, "Source", inline="kc21", group="LTF KELTNER CHANNEL")
+ltfKCLength = input(50, "LTF Length", inline="kc22", group="LTF KELTNER CHANNEL")
+ltfKCMult = input(2, "LTF Multiplier", input.float, step=0.25, minval=0.25, inline="kc22", group="LTF KELTNER CHANNEL")
+ltfKCRange = input("ATR", "Range Style", options=["ATR", "True Range", "Bar Width"], inline="kc23", group="LTF KELTNER CHANNEL")
+ltfKCRangeLen = input(10, "Range Period", inline="kc23", group="LTF KELTNER CHANNEL")
+
+
+[ltfKCMiddle, ltfKCUpper, ltfKCLower] = f_kc(ltfKCSrc, ltfKCLength, ltfKCMult, ltfKCRange, ltfKCRangeLen, ltfKCRes)
+
+//}
+//SIGNALS ==> ltfKCMiddle, ltfKCUpper, ltfKCLower
+
+//WAVE TREND
+// {
+wtChannelLen = input(10, "Channel Length", inline="wt1", group="WAVE TREND")
+wtAvgLen = input(21, "Average Length", inline="wt1", group="WAVE TREND")
+wtOb = input(50, "WT Overbought", group="WAVE TREND", inline="wtObOs")
+wtOs = input(-50, "WT Oversold", group="WAVE TREND", inline="wtObOs")
+wtUseObOs = input(true, "Use Wave Trend Overbought/Oversold Levels", group="WAVE TREND")
+ 
+wtSrc = hlc3 
+wtEsa = ema(wtSrc, wtChannelLen)
+d = ema(abs(wtSrc - wtEsa), wtChannelLen)
+ci = (wtSrc - wtEsa) / (0.015 * d)
+tci = ema(ci, wtAvgLen)
+ 
+wtLine = tci
+wtSignal = sma(wtLine,4)
+
+isWtOb = wtUseObOs ? wtLine >= wtOb : wtLine > 0
+isWtOs = wtUseObOs ? wtLine <= wtOs : wtLine < 0
+
+wtLong = crossover(wtLine, wtSignal) and isWtOs
+wtShort = crossunder(wtLine, wtSignal) and isWtOb
+
+//}
+//SIGNALS ==> wtLong, wtShort
+
+//}
+
+//************** ADDITIONAL INDICATORS ***************//
+
+useFilter = input(false, "Use Additional Filters", group="ADDITIONAL FILTERS")
+useSt = input(true, "Use Stochastic", group="ADDITIONAL FILTERS")
+useMacd = input(true, "Use MACD", group="ADDITIONAL FILTERS")
+useRsi = input(true, "Use RSI", group="ADDITIONAL FILTERS")
+
+// HTF STOCHASTIC
+// {
+
+stRes = input("60", "Stochastic Timeframe", input.resolution, group="STOCHASTIC")
+stLen = input(14, title="%K Length", minval=1, group="STOCHASTIC")
+stSmooth = input(1, title="%K Smoothing", minval=1, group="STOCHASTIC")
+stSigLen = input(3, title="%D Smoothing", minval=1, group="STOCHASTIC")
+stOb = input(75,  "Overbought", group="STOCHASTIC", inline="stObOs")
+stOs = input(25,  "Oversold", group="STOCHASTIC", inline="stObOs")
+
+stoch = security(syminfo.tickerid, stRes, sma(stoch(close, high, low, stLen), stSmooth), barmerge.gaps_off, barmerge.lookahead_off) 
+stSignal = sma(stoch, stSigLen)
+
+
+stGoesUp = crossover(stoch, 50)
+stGoesDn = crossunder(stoch, 50)
+
+stGoesOb = crossover(stoch, stOb)
+stGoesOs = crossunder(stoch, stOs)
+
+stLong = barssince(stGoesOs) < barssince(stGoesDn)
+stShort = barssince(stGoesOb) < barssince(stGoesUp)
+
+//}
+//SIGNAL ==> stLong, stShort
+
+// HTF MACD
+//{
+// INPUTS
+
+macdSrc = input(close, "MACD Source", input.source, group="HTF MACD")
+macdflen = input(12, "MACD Fast Length", group="HTF MACD")
+macdslen = input(26, "MACD Slow Length", group="HTF MACD")
+siglen = input(9, "MACD Signal Line", group="HTF MACD")
+htfMacdRes = input("120", "MACD TimeFrame", input.resolution, group="HTF MACD")
+
+// FUNCTIONS
+//{
+htf_macd() =>
+    htfFastMa = sma(macdSrc, macdflen)
+    htfSlowMa = sma(macdSrc, macdslen)
+    htfMacd    = htfFastMa - htfSlowMa
+    htfSignal  = sma(htfMacd, siglen)
+    htfMacd
+    
+htf_signal() =>
+    // Calculating
+    htfFastMa = sma(macdSrc, macdflen)
+    htfSlowMa = sma(macdSrc, macdslen)
+    htfMacd    = htfFastMa - htfSlowMa
+    htfSignal  = sma(htfMacd, siglen)
+    htfSignal 
+
+htf_color() =>
+    // Calculating
+    htfFastMa = sma(macdSrc, macdflen)
+    htfSlowMa = sma(macdSrc, macdslen)
+    htfMacd    = htfFastMa - htfSlowMa
+    htfSignal  = sma(htfMacd, siglen)
+    htfHist    = htfMacd - htfSignal
+    (htfHist>=0 ? (htfHist[1] < htfHist ? #26A69A : #B2DFDB) : (htfHist[1] < htfHist ? #FFCDD2 : #EF5350) )
+
+
+//}
+
+// CALCULATIONS  
+htfMacd   = security(syminfo.tickerid, htfMacdRes, htf_macd())
+htfSignal = security(syminfo.tickerid, htfMacdRes, htf_signal())
+mcolor = security(syminfo.tickerid, htfMacdRes, htf_color())
+
+// Hist
+htfHist = htfMacd - htfSignal
+
+// SIGNALS 
+htfMacdLong = mcolor == #FFCDD2 //RED HISTOGRAM IS DECREASING, BULLISH CROSSOVER ABOUT TO HAPPEN
+htfMacdShort = mcolor == #B2DFDB //GREEN HISTOGRAM IS DECREASING, BEARING CROSSOVER ABOUT TO HAPPEN
+
+//}-----End of HTF MACD
+//SIGNALS ==> htfMacdLong, htfMacdShort
+
+//HTF RSI
+//{
+
+//INPUTS 
+rsiSrc = input(close, "RSI Source", input.source, group="RSI")
+rsiLen = input(14, "RSI Length", group="RSI")
+rsiRes = input("120", "RSI Timeframe", input.resolution, group="RSI")
+rsiOb  = input(60, "Overbought", group="RSI", inline ="rsiObOs")
+rsiOs  = input(40, "Oversold", group="RSI", inline ="rsiObOs")
+
+rsi = security(syminfo.tickerid, rsiRes, rsi(rsiSrc, rsiLen), barmerge.gaps_off, barmerge.lookahead_off)
+
+rsiShort = rsi >= rsiOb
+rsiLong = rsi <= rsiOs
+//}
+//SIGNAL ==> rsiLong, rsiShort
+
+//************** ENTRIES ***************//
+// {
+
+InZone(_top, _bott, _top2, _bott2) => (high <= _top and high >= _bott ) or ( low <= _top and low >= _bott) or (high >= _top and low <= _bott)
+
+inHTFZone = InZone(htfKCUpper, htfKCLower, ltfKCUpper, ltfKCLower)
+inLTFZone = InZone(ltfKCUpper, ltfKCLower, high, low)
+
+filterLong = useFilter ? (useSt and useMacd and useRsi ? stLong and htfMacdLong and rsiLong :
+  useSt and useRsi ? stLong and rsiLong : 
+  useRsi and useMacd ? rsiLong and htfMacdLong : 
+  useSt and useMacd ? stLong and htfMacdLong : 
+  useSt ? stLong : 
+  useMacd ? htfMacdLong : 
+  useRsi ? rsiLong : false) : false
+
+filterShort = useFilter ? (useSt and useMacd and useRsi ? stShort and htfMacdShort and rsiShort :
+  useSt and useRsi ? stShort and rsiShort : 
+  useRsi and useMacd ? rsiShort and htfMacdShort : 
+  useSt and useMacd ? stShort and htfMacdShort : 
+  useSt ? stShort : 
+  useMacd ? htfMacdShort : 
+  useRsi ? rsiShort : false) : false
+
+goLong = useFilter ? (ltfKCMiddle > htfKCMiddle) and inLTFZone and (not inHTFZone) and wtLong and filterLong :
+  (ltfKCMiddle > htfKCMiddle) and inLTFZone and (not inHTFZone) and wtLong
+    
+goShort = useFilter ? (ltfKCMiddle < htfKCMiddle) and inLTFZone and (not inHTFZone) and wtShort and filterShort : 
+  (ltfKCMiddle < htfKCMiddle) and inLTFZone and (not inHTFZone) and wtShort
+
+//}
+
+
+//PLOTS
+//{
+
+plotshape((ltfKCMiddle > htfKCMiddle) and inLTFZone and inHTFZone, "Long", shape.triangleup, location.belowbar, color.lime, size = size.small)
+plotshape((ltfKCMiddle < htfKCMiddle) and inLTFZone and inHTFZone, "Short", shape.triangledown, location.abovebar, color.maroon, size = size.small)
+
+//}
