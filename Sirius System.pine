@@ -1,0 +1,159 @@
+// © Jerry
+
+//@version=4
+study("Sirius Wavetrend", overlay=1)
+
+//*************** SIRIUS SYSTEM ***************//
+// {
+    
+//GENERAL SETTINGS
+useGenObOs = input(true, "Use General Overbought/Oversold?", group="General Settings")
+genOb = input(70, "General Overbought Level", group="General Settings")
+genOs = input(30, "General Oversold Level", group="General Settings")
+
+incAltMacd = input(false, "Include Alternative MACD Rule?")
+scndInd = input("RSI", "Sirius Second Indicator", options = ["RSI", "Stochastic", "Any", "Both"], group="General Settings")
+
+//***** INDICATORS *****//
+
+// HTF MACD
+// {
+
+// INPUTS
+//{
+macdRes     = input("120", "HTF MACD TimeFrame", input.resolution, group="HTF MACD")
+macdSrc = input(close, "MACD Source", input.source, group="HTF MACD")
+macdflen = input(12, "MACD Fast Length", group="HTF MACD")
+macdslen = input(26, "MACD Slow Length", group="HTF MACD")
+siglen = input(9, "MACD Signal Line", group="HTF MACD")
+//}
+
+// FUNCTIONS
+//{
+htf_macd() =>
+    htfFastMa = sma(macdSrc, macdflen)
+    htfSlowMa = sma(macdSrc, macdslen)
+    htfMacd    = htfFastMa - htfSlowMa
+    htfSignal  = sma(htfMacd, siglen)
+    htfMacd
+    
+htf_signal() =>
+    // Calculating
+    htfFastMa = sma(macdSrc, macdflen)
+    htfSlowMa = sma(macdSrc, macdslen)
+    htfMacd    = htfFastMa - htfSlowMa
+    htfSignal  = sma(htfMacd, siglen)
+    htfSignal 
+
+htf_color() =>
+    // Calculating
+    htfFastMa = sma(macdSrc, macdflen)
+    htfSlowMa = sma(macdSrc, macdslen)
+    htfMacd    = htfFastMa - htfSlowMa
+    htfSignal  = sma(htfMacd, siglen)
+    htfHist    = htfMacd - htfSignal
+    (htfHist>=0 ? (htfHist[1] < htfHist ? #26A69A : #B2DFDB) : (htfHist[1] < htfHist ? #FFCDD2 : #EF5350) )
+
+
+//}
+
+// CALCULATIONS
+//{
+htfMacd   = security(syminfo.tickerid, macdRes, htf_macd(), barmerge.gaps_off, barmerge.lookahead_off)
+htfSignal = security(syminfo.tickerid, macdRes, htf_signal(), barmerge.gaps_off, barmerge.lookahead_off)
+mcolor = security(syminfo.tickerid, macdRes, htf_color(), barmerge.gaps_off, barmerge.lookahead_off)
+
+// Histogram
+htfHist    = htfMacd - htfSignal
+//}
+
+// SIGNALS 
+//{
+htfMacdLong = mcolor == #FFCDD2
+htfMacdShort = mcolor == #B2DFDB
+
+altHtfMacdLong = mcolor == #26A69A and htfMacd < 0
+altHtfMacdShort = mcolor == #EF5350 and htfMacd > 0
+//}
+
+
+//}
+// SIGNAL ==> htfMacdLong, htfMacdShort, altHtfMacdLong, altHtfMacdShort
+
+//HTF RSI
+// {
+
+//INPUTS 
+// {
+rsiRes = input("120", "RSI Timeframe", input.resolution, group="RSI")
+rsiSrc = input(close, "RSI Source", input.source, group="RSI")
+rsiLen = input(14, "RSI Length", group="RSI")
+rsiOb  = input(60, "Overbought", group="RSI", inline ="rsiObOs")
+rsiOs  = input(40, "Oversold", group="RSI", inline ="rsiObOs")
+// }
+
+//CALCULATION
+// {
+rsi = security(syminfo.tickerid, rsiRes, rsi(rsiSrc, rsiLen), barmerge.gaps_off, barmerge.lookahead_off)
+
+isRsiOb = useGenObOs ? rsi >= genOb : rsi >= rsiOb
+isRsiOs = useGenObOs ? rsi <= genOs : rsi <= rsiOs
+// }
+
+//}
+// SIGNAL ==> isRsiOb, isRsiOs
+
+// HTF STOCHASTIC
+// {
+
+stRes = input("120", "Stochastic Timeframe", input.resolution, group="STOCHASTIC")
+stLen = input(10, title="%K Length", minval=1, group="STOCHASTIC")
+stSmooth = input(3, title="%K Smoothing", minval=1, group="STOCHASTIC")
+stSigLen = input(3, title="%D Smoothing", minval=1, group="STOCHASTIC")
+stOb = input(70,  "Overbought", group="STOCHASTIC", inline="stObOs")
+stOs = input(30,  "Oversold", group="STOCHASTIC", inline="stObOs")
+
+stoch = security(syminfo.tickerid, stRes, sma(stoch(close, high, low, stLen), stSmooth), barmerge.gaps_off, barmerge.lookahead_off) 
+stSignal = sma(stoch, stSigLen)
+
+isStOb = useGenObOs ? stoch >= genOb : stoch >= stOb
+isStOs = useGenObOs ? stoch <= genOs : stoch <= stOs
+
+//}
+//SIGNAL ==> isStOb, isStOs
+
+
+//***** SIRIUS SIGNALS *****//
+// {
+
+srMacdLong = incAltMacd ? htfMacdLong or altHtfMacdLong : htfMacdLong
+srMacdShort = incAltMacd ? htfMacdShort or altHtfMacdShort : htfMacdShort
+
+sr2ndIndLong  = 
+  scndInd == "Both" ? isRsiOs and isStOs :
+  scndInd == "Any" ? isRsiOs or isStOs :
+  scndInd == "RSI" ? isRsiOs :
+  scndInd == "Stochastic" ? isStOs :
+  na
+
+
+sr2ndIndShort  = 
+  scndInd == "Both" ? isRsiOb and isStOb :
+  scndInd == "Any" ? isRsiOb or isStOb :
+  scndInd == "RSI" ? isRsiOb :
+  scndInd == "Stochastic" ? isStOb :
+  na
+  
+  
+srLong = srMacdLong and sr2ndIndLong
+srShort = srMacdShort and sr2ndIndShort
+//}
+//SIGNALS ==> srLong, srShort
+
+// }
+
+plot(na)
+
+plotshape(srLong, "Long", shape.triangleup, location.belowbar, color.lime, size = size.small)
+plotshape(srShort, "Short", shape.triangledown, location.abovebar, color.maroon, size = size.small)
+

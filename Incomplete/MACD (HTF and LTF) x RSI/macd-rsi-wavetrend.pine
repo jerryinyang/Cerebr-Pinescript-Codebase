@@ -56,7 +56,7 @@ htf_color() =>
     htfMacd    = htfFastMa - htfSlowMa
     htfSignal  = sma(htfMacd, siglen)
     htfHist    = htfMacd - htfSignal
-    (hist>=0 ? (hist[1] < hist ? #26A69A : #B2DFDB) : (hist[1] < hist ? #FFCDD2 : #EF5350) )
+    (htfHist>=0 ? (htfHist[1] < htfHist ? #26A69A : #B2DFDB) : (htfHist[1] < htfHist ? #FFCDD2 : #EF5350) )
 
 
 //}
