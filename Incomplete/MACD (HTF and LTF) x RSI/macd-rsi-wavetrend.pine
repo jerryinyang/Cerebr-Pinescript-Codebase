@@ -4,13 +4,6 @@
 // - Find Entries on only pullbacks 
 // - Use wide gaps in Higher Timeframe selection (HTF= 4H, Trading TF= M5)
 
-//NOTES
-// I combine this with the WaveTrend indicator to form a new strategy
-// The rules:
-//     Entry Signal: The first WaveTrend signal in the same direction as the most recent MACD x RSI signal.
-//     Trigger is a break of the high of the MxR bar (for Long) or low of MxR bar (for Short) 
-
-
 // � Jerry
 
 //@version=4
