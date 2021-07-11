@@ -1,6 +1,7 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
 // © Jerry
 
-///@version=4
+//@version=4
 study("Sirius Wavetrend", overlay=1)
 
 //*************** SIRIUS SYSTEM ***************//
@@ -10,8 +11,10 @@ useGenObOs = input(true, "Use General Overbought/Oversold?", group="General Sett
 genOb = input(70, "General Overbought Level", group="General Settings")
 genOs = input(30, "General Oversold Level", group="General Settings")
 
-incAltMacd = input(false, "Include Alternative MACD Rule?")
+
+firstInd = input("MACD", "First Indicator", options=["MACD", "Wave Trend"])
 scndInd = input("RSI", "Sirius Second Indicator", options = ["RSI", "Stochastic", "Any", "Both"], group="General Settings")
+incAltMacd = input(false, "Include Alternative MACD Rule?")
 
 //***** INDICATORS *****//
 
@@ -20,7 +23,7 @@ scndInd = input("RSI", "Sirius Second Indicator", options = ["RSI", "Stochastic"
 
 // INPUTS
 //{
-macdRes     = input("240", "HTF MACD TimeFrame", input.resolution, group="HTF MACD")
+macdRes     = input("120", "HTF MACD TimeFrame", input.resolution, group="HTF MACD")
 macdSrc = input(close, "MACD Source", input.source, group="HTF MACD")
 macdflen = input(12, "MACD Fast Length", group="HTF MACD")
 macdslen = input(26, "MACD Slow Length", group="HTF MACD")
@@ -69,12 +72,46 @@ altHtfMacdShort = mcolor == #EF5350 and htfMacd > 0
 //}
 // SIGNAL ==> htfMacdLong, htfMacdShort, altHtfMacdLong, altHtfMacdShort
 
+//WAVE TREND
+// {
+
+wtRes = input("120", "Wave Trend Timeframe", input.resolution, group="WAVE TREND")
+wtChannelLen = input(10, "Channel Length", inline="wt1", group="WAVE TREND")
+wtAvgLen = input(21, "Average Length", inline="wt1", group="WAVE TREND")
+wtOb = input(50, "WT Overbought", group="WAVE TREND", inline="wtObOs")
+wtOs = input(-50, "WT Oversold", group="WAVE TREND", inline="wtObOs")
+wtUseObOs = input(true, "Use Wave Trend Overbought/Oversold Levels", group="WAVE TREND")
+ 
+wtSrc = security(syminfo.tickerid, wtRes, hlc3, barmerge.gaps_off, barmerge.lookahead_off) 
+wtEsa = security(syminfo.tickerid, wtRes, ema(wtSrc, wtChannelLen), barmerge.gaps_off, barmerge.lookahead_off)
+d = security(syminfo.tickerid, wtRes, ema(abs(wtSrc - wtEsa), wtChannelLen), barmerge.gaps_off, barmerge.lookahead_off)
+ci = (wtSrc - wtEsa) / (0.015 * d)
+tci = ema(ci, wtAvgLen)
+ 
+wtLine = tci
+wtSignal = sma(wtLine,4)
+wtHist = wtLine - wtSignal
+
+wtHistColor = wtHist >= 0 ? ( wtHist[1] < wtHist ? #26A69A : #B2DFDB ) : ( wtHist[1] < wtHist ? #FFCDD2 : #EF5350 ) 
+
+isWtOb = wtUseObOs ? wtLine >= wtOb : wtLine > 0
+isWtOs = wtUseObOs ? wtLine <= wtOs : wtLine < 0
+
+wtLong = wtHistColor == #FFCDD2 and isWtOs
+wtShort = wtHistColor == #B2DFDB and isWtOb
+
+
+//}
+//SIGNALS ==> wtLong, wtShort
+
+//Alternative signal for Wave trend is if HTF Wavetrend has a bullish configuration (wtLine > wtSignal) or bearish
+
 //HTF RSI
 // {
 
 //INPUTS 
 // {
-rsiRes = input("120", "RSI Timeframe", input.resolution, group="RSI")
+rsiRes = input("60", "RSI Timeframe", input.resolution, group="RSI")
 rsiSrc = input(close, "RSI Source", input.source, group="RSI")
 rsiLen = input(14, "RSI Length", group="RSI")
 rsiOb  = input(60, "Overbought", group="RSI", inline ="rsiObOs")
@@ -95,7 +132,7 @@ isRsiOs = useGenObOs ? rsi <= genOs : rsi <= rsiOs
 // HTF STOCHASTIC
 // {
 
-stRes = input("120", "Stochastic Timeframe", input.resolution, group="STOCHASTIC")
+stRes = input("60", "Stochastic Timeframe", input.resolution, group="STOCHASTIC")
 stLen = input(10, title="%K Length", minval=1, group="STOCHASTIC")
 stSmooth = input(3, title="%K Smoothing", minval=1, group="STOCHASTIC")
 stSigLen = input(3, title="%D Smoothing", minval=1, group="STOCHASTIC")
@@ -118,6 +155,9 @@ isStOs = useGenObOs ? stoch <= genOs : stoch <= stOs
 srMacdLong = incAltMacd ? htfMacdLong or altHtfMacdLong : htfMacdLong
 srMacdShort = incAltMacd ? htfMacdShort or altHtfMacdShort : htfMacdShort
 
+sr1stIndLong = firstInd == "MACD" ? srMacdLong : firstInd == "Wave Trend" ? wtLong : na
+sr1stIndShort = firstInd == "MACD" ? srMacdShort : firstInd == "Wave Trend" ? wtShort : na
+
 sr2ndIndLong  = 
   scndInd == "Both" ? isRsiOs and isStOs :
   scndInd == "Any" ? isRsiOs or isStOs :
@@ -134,10 +174,12 @@ sr2ndIndShort  =
   na
   
   
-srLong = srMacdLong and sr2ndIndLong
-srShort = srMacdShort and sr2ndIndShort
+srLong = sr1stIndLong and sr2ndIndLong
+srShort = sr1stIndShort and sr2ndIndShort
 //}
 //SIGNALS ==> srLong, srShort
 
 plotshape(srLong, "Long", shape.triangleup, location.belowbar, color.lime, size = size.small)
 plotshape(srShort, "Short", shape.triangledown, location.abovebar, color.maroon, size = size.small)
+
+plot(na)
