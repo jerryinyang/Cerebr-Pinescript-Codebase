@@ -1,11 +1,10 @@
 // © Jerry
 
-//@version=4
+///@version=4
 study("Sirius Wavetrend", overlay=1)
 
 //*************** SIRIUS SYSTEM ***************//
-// {
-    
+
 //GENERAL SETTINGS
 useGenObOs = input(true, "Use General Overbought/Oversold?", group="General Settings")
 genOb = input(70, "General Overbought Level", group="General Settings")
@@ -21,11 +20,12 @@ scndInd = input("RSI", "Sirius Second Indicator", options = ["RSI", "Stochastic"
 
 // INPUTS
 //{
-macdRes     = input("120", "HTF MACD TimeFrame", input.resolution, group="HTF MACD")
+macdRes     = input("240", "HTF MACD TimeFrame", input.resolution, group="HTF MACD")
 macdSrc = input(close, "MACD Source", input.source, group="HTF MACD")
 macdflen = input(12, "MACD Fast Length", group="HTF MACD")
 macdslen = input(26, "MACD Slow Length", group="HTF MACD")
 siglen = input(9, "MACD Signal Line", group="HTF MACD")
+macdMeth = input("Calculate", "MACD Calculation Method", options=["Calculate", "HTF Import"])
 //}
 
 // FUNCTIONS
@@ -35,47 +35,36 @@ htf_macd() =>
     htfSlowMa = sma(macdSrc, macdslen)
     htfMacd    = htfFastMa - htfSlowMa
     htfSignal  = sma(htfMacd, siglen)
-    htfMacd
-    
-htf_signal() =>
-    // Calculating
-    htfFastMa = sma(macdSrc, macdflen)
-    htfSlowMa = sma(macdSrc, macdslen)
-    htfMacd    = htfFastMa - htfSlowMa
-    htfSignal  = sma(htfMacd, siglen)
-    htfSignal 
-
-htf_color() =>
-    // Calculating
-    htfFastMa = sma(macdSrc, macdflen)
-    htfSlowMa = sma(macdSrc, macdslen)
-    htfMacd    = htfFastMa - htfSlowMa
-    htfSignal  = sma(htfMacd, siglen)
     htfHist    = htfMacd - htfSignal
-    (htfHist>=0 ? (htfHist[1] < htfHist ? #26A69A : #B2DFDB) : (htfHist[1] < htfHist ? #FFCDD2 : #EF5350) )
-
-
+    clr = (htfHist>=0 ? (htfHist[1] < htfHist ? #26A69A : #B2DFDB) : (htfHist[1] < htfHist ? #FFCDD2 : #EF5350) )
+    
+    [htfMacd, htfSignal, htfHist, clr]
 //}
 
 // CALCULATIONS
 //{
-htfMacd   = security(syminfo.tickerid, macdRes, htf_macd(), barmerge.gaps_off, barmerge.lookahead_off)
-htfSignal = security(syminfo.tickerid, macdRes, htf_signal(), barmerge.gaps_off, barmerge.lookahead_off)
-mcolor = security(syminfo.tickerid, macdRes, htf_color(), barmerge.gaps_off, barmerge.lookahead_off)
 
-// Histogram
-htfHist    = htfMacd - htfSignal
+[calcMacd, calcSignal, calcHist, calcHistcolor] = security(syminfo.tickerid, macdRes, htf_macd(), barmerge.gaps_off, barmerge.lookahead_off)
+[impMacd, impSignal, impHist] = security(syminfo.tickerid, macdRes, macd(macdSrc, macdflen, macdslen, siglen), barmerge.gaps_off, barmerge.lookahead_off)
+impHistColor = impHist >= 0 ? ( impHist[1] < impHist ? #26A69A : #B2DFDB ) : ( impHist[1] < impHist ? #FFCDD2 : #EF5350 ) 
+
+
+htfMacd = macdMeth == "Calculate" ? calcMacd : impMacd
+htfSignal = macdMeth == "Calculate" ? calcSignal : impSignal
+htfHist = macdMeth == "Calculate" ? calcHist : impHist
+mcolor = macdMeth == "Calculate" ? calcHistcolor : impHistColor
+
+
 //}
 
 // SIGNALS 
 //{
-htfMacdLong = mcolor == #FFCDD2
-htfMacdShort = mcolor == #B2DFDB
+htfMacdLong = mcolor == #FFCDD2 and htfMacd < 0
+htfMacdShort = mcolor == #B2DFDB and htfMacd > 0 
 
 altHtfMacdLong = mcolor == #26A69A and htfMacd < 0
 altHtfMacdShort = mcolor == #EF5350 and htfMacd > 0
 //}
-
 
 //}
 // SIGNAL ==> htfMacdLong, htfMacdShort, altHtfMacdLong, altHtfMacdShort
@@ -150,10 +139,5 @@ srShort = srMacdShort and sr2ndIndShort
 //}
 //SIGNALS ==> srLong, srShort
 
-// }
-
-plot(na)
-
 plotshape(srLong, "Long", shape.triangleup, location.belowbar, color.lime, size = size.small)
 plotshape(srShort, "Short", shape.triangledown, location.abovebar, color.maroon, size = size.small)
-
