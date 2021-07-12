@@ -1,7 +1,21 @@
-filterShort = useFilter ? (useSt and useMacd and useRsi ? stShort and htfMacdShort and rsiShort :
-  useSt and useRsi ? stShort and rsiShort : 
-  useRsi and useMacd ? rsiShort and htfMacdShort : 
-  useSt and useMacd ? stShort and htfMacdShort : 
-  useSt ? stShort : 
-  useMacd ? htfMacdShort : 
-  useRsi ? rsiShort) : false
+exitLtfShort = 
+  useExMa and useExMacd and useExStoch and useExRsi ? exitMaShort or exitMacdShort or exitStochShort or exitRsiShort : 
+  
+  useExMacd and useExStoch and useExRsi ? exitMacdShort or exitStochShort or exitRsiShort : 
+  useExMa and useExStoch and useExRsi ? exitMaShort or exitStochShort or exitRsiShort : 
+  useExMa and useExMacd and useExRsi ? exitMaShort or exitMacdShort or exitRsiShort : 
+  useExMa and useExMacd and useExStoch ? exitMaShort or exitMacdShort or exitStochShort :
+
+  useExMa and useExMacd ? exitMaShort or exitMacdShort : 
+  useExMa and useExStoch ? exitMaShort or exitStochShort : 
+  useExMa and useExRsi ? exitMaShort or exitRsiShort : 
+  useExMacd and useExStoch ? exitMacdShort or exitStochShort : 
+  useExMacd and useExRsi ? exitMacdShort or exitRsiShort : 
+  useExStoch and useExRsi ? exitStochShort or exitRsiShort : 
+
+  useExMa ? exitMaShort : 
+  useExMacd ? exitMacdShort : 
+  useExStoch? exitStochShort : 
+  useExRsi ? exitRsiShort : 
+
+  na
