@@ -1,6 +1,6 @@
-prevBarInLongZn = InZone(longTop, longBott, 1)
-currBarInLongZn = InZone(longTop, longBott, 0)
-prevBarAboveLongZn = (not InZone(longTop, longBott, 1)) and low[1] > longTop
-prevBarBelowLongZn = (not InZone(longTop, longBott, 1)) and high[1] < longBott
+prevBarInShortZn = InZone(shortTop, shortBott, 1)
+currBarInShortZn = InZone(shortTop, shortBott, 0)
+prevBarAboveShortZn = (not InZone(shortTop, shortBott, 1)) and low[1] > shortTop
+prevBarBelowShortZn = (not InZone(shortTop, shortBott, 1)) and high[1] < shortBott
 
-priceRetouchLong = prevBarAboveLongZn and  currBarInLongZn
+priceRetouchShort = prevBarAboveShortZn and  currBarInShortZn
