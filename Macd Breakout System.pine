@@ -7,11 +7,10 @@ study("MACD HIST", overlay=1)
 
 /// INPUTS
 // {
-Res = input("60", " MACD TimeFrame", input.resolution)
-src = input(close, "Source",input.source)
-macdflen = 8
-macdslen = 17
-siglen = 9
+htfRes = input("60", " MACD TimeFrame", input.resolution, group="MACD SETTINGS")
+macdflen = input(8, "MACD Fast MA", input.integer, group="MACD SETTINGS")
+macdslen = input(17, "macd Slow MA", input.integer, group="MACD SETTINGS")
+siglen = input(9, "MACD signal Line", input.integer, group="MACD SETTINGS")
 //}
 
 // FUNCTIONS
@@ -20,27 +19,26 @@ _macd() =>
     macdSrc     = close
     FastMa = ema(macdSrc, macdflen)
     SlowMa = ema(macdSrc, macdslen)
-    Macd    = FastMa - SlowMa
-    Signal  = ema(Macd, siglen)
-    Macd
+    macd    = FastMa - SlowMa
+    macd
     
 _signal() =>
     // Calculating
     macdSrc     = close
     FastMa = ema(macdSrc, macdflen)
     SlowMa = ema(macdSrc, macdslen)
-    Macd    = FastMa - SlowMa
-    Signal  = ema(Macd, siglen)
-    Signal 
+    macd    = FastMa - SlowMa
+    signal  = ema(macd, siglen)
+    signal 
 
 _color() =>
     // Calculating
     macdSrc     = close
     FastMa = ema(macdSrc, macdflen)
     SlowMa = ema(macdSrc, macdslen)
-    Macd    = FastMa - SlowMa
-    Signal  = ema(Macd, siglen)
-    hist    = Macd - Signal
+    macd    = FastMa - SlowMa
+    signal  = ema(macd, siglen)
+    hist    = macd - signal
     (hist>=0 ? (hist[1] < hist ? #26A69A : #B2DFDB) : (hist[1] < hist ? #FFCDD2 : #EF5350) )
 
 htf(_res, _exp, gaps_on)  => gaps_on == 0 ? security(syminfo.tickerid, _res, _exp) :
@@ -51,12 +49,12 @@ htf(_res, _exp, gaps_on)  => gaps_on == 0 ? security(syminfo.tickerid, _res, _ex
 
 // CALCULATION
 // {
-Macd   = htf(Res, _macd(), true)
-Signal = htf(Res, _signal(), true)
-mcolor = htf(Res, _color(), true)
+macd   = htf(htfRes, _macd(), true)
+signal = htf(htfRes, _signal(), true)
+mcolor = htf(htfRes, _color(), true)
 
 // Calculate hist 
-hist    = htf(Res, Macd - Signal, 0)
+hist    = htf(htfRes, macd - signal, 0)
 //}
 //}-----End of  MACD
 
@@ -68,19 +66,19 @@ usePrevZn = input(false, "Use Previous Bar as Zone")
 
 //ZONE MARKING
 // {
-histIncBelow = htf(Res, rising(hist, 1), 0) and hist < 0
-histDecAbove = htf(Res, falling(hist, 1), 0) and hist > 0
+histIncBelow = htf(htfRes, rising(hist, 1), 0) and hist < 0
+histDecAbove = htf(htfRes, falling(hist, 1), 0) and hist > 0
 
-startIncBelow = htf(Res, histIncBelow[1] == false and histIncBelow == true, 0)
-startDecAbove = htf(Res, histDecAbove[1] == false and histDecAbove == true, 0)
+startIncBelow = htf(htfRes, histIncBelow[1] == false and histIncBelow == true, 0)
+startDecAbove = htf(htfRes, histDecAbove[1] == false and histDecAbove == true, 0)
 
 //To Mark out zone, mark the highs and the lows of the htf candles
 
-htfprevbarHigh = htf(Res, high[1], 0)
-htfprevbarLow = htf(Res, low[1], 0)
+htfprevbarHigh = htf(htfRes, high[1], 0)
+htfprevbarLow = htf(htfRes, low[1], 0)
 
-htfbarHigh = htf(Res, high, 0)
-htfbarLow = htf(Res, low, 0)
+htfbarHigh = htf(htfRes, high, 0)
+htfbarLow = htf(htfRes, low, 0)
 
 znHigh = usePrevZn ? htfprevbarHigh : htfbarHigh
 znLow = usePrevZn ? htfprevbarLow : htfbarLow
