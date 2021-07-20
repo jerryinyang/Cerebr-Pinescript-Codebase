@@ -11,6 +11,7 @@ htfRes = input("60", " MACD TimeFrame", input.resolution, group="MACD SETTINGS")
 macdflen = input(8, "MACD Fast MA", input.integer, group="MACD SETTINGS")
 macdslen = input(17, "macd Slow MA", input.integer, group="MACD SETTINGS")
 siglen = input(9, "MACD signal Line", input.integer, group="MACD SETTINGS")
+gaps = input(true, "Gaps")
 //}
 
 // FUNCTIONS
@@ -49,9 +50,9 @@ htf(_res, _exp, gaps_on)  => gaps_on == 0 ? security(syminfo.tickerid, _res, _ex
 
 // CALCULATION
 // {
-macd   = htf(htfRes, _macd(), true)
-signal = htf(htfRes, _signal(), true)
-mcolor = htf(htfRes, _color(), true)
+macd   = htf(htfRes, _macd(), gaps)
+signal = htf(htfRes, _signal(), gaps)
+mcolor = htf(htfRes, _color(), gaps)
 
 // Calculate hist 
 hist    = htf(htfRes, macd - signal, 0)
@@ -80,18 +81,24 @@ htfprevbarLow = htf(htfRes, low[1], 0)
 htfbarHigh = htf(htfRes, high, 0)
 htfbarLow = htf(htfRes, low, 0)
 
-znHigh = usePrevZn ? htfprevbarHigh : htfbarHigh
-znLow = usePrevZn ? htfprevbarLow : htfbarLow
+znHigh = startIncBelow or startDecAbove ?  usePrevZn ? htfprevbarHigh : htfbarHigh : na
+znLow = startIncBelow or startDecAbove ?  usePrevZn ? htfprevbarLow : htfbarLow : na
+
+var Top = 0.0
+var Bott = 0.0
+
+if (startIncBelow or startDecAbove)
+    Top := znHigh
+    Bott := znLow
 
 //}
 
 // PLOTS
 //{
-// plot(hist, style = plot.style_histogram, color=mcolor, linewidth=3)
 
 znTop = plot(startIncBelow or startDecAbove ? znHigh : na, title='Top', color=color.blue, style=plot.style_linebr, linewidth=2)
 znBott = plot(startIncBelow or startDecAbove ? znLow : na, title='Bottom', color=color.blue, style=plot.style_linebr, linewidth=2)
-fill(znTop, znBott, startIncBelow ? color.new(color.olive, 80) : color.new(color.maroon, 80))
+fill(znTop, znBott, startIncBelow? color.new(color.olive, 80) : color.new(color.maroon, 80))
 
 bgcolor(startIncBelow ? color.new(color.lime, 70) : na)
 bgcolor(startDecAbove ? color.new(color.red, 70) : na)
