@@ -1,21 +1,6 @@
-exitLtfShort = 
-  useExMa and useExMacd and useExStoch and useExRsi ? exitMaShort or exitMacdShort or exitStochShort or exitRsiShort : 
-  
-  useExMacd and useExStoch and useExRsi ? exitMacdShort or exitStochShort or exitRsiShort : 
-  useExMa and useExStoch and useExRsi ? exitMaShort or exitStochShort or exitRsiShort : 
-  useExMa and useExMacd and useExRsi ? exitMaShort or exitMacdShort or exitRsiShort : 
-  useExMa and useExMacd and useExStoch ? exitMaShort or exitMacdShort or exitStochShort :
+prevBarInLongZn = InZone(longTop, longBott, 1)
+currBarInLongZn = InZone(longTop, longBott, 0)
+prevBarAboveLongZn = (not InZone(longTop, longBott, 1)) and low[1] > longTop
+prevBarBelowLongZn = (not InZone(longTop, longBott, 1)) and high[1] < longBott
 
-  useExMa and useExMacd ? exitMaShort or exitMacdShort : 
-  useExMa and useExStoch ? exitMaShort or exitStochShort : 
-  useExMa and useExRsi ? exitMaShort or exitRsiShort : 
-  useExMacd and useExStoch ? exitMacdShort or exitStochShort : 
-  useExMacd and useExRsi ? exitMacdShort or exitRsiShort : 
-  useExStoch and useExRsi ? exitStochShort or exitRsiShort : 
-
-  useExMa ? exitMaShort : 
-  useExMacd ? exitMacdShort : 
-  useExStoch? exitStochShort : 
-  useExRsi ? exitRsiShort : 
-
-  na
+priceRetouchLong = prevBarAboveLongZn and  currBarInLongZn

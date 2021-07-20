@@ -1,6 +1,6 @@
 
 //@version=4
-study("MACD HIST", overlay=1)
+study("MACD Breakout", overlay=1)
 
 //***************  MACD ***************//
 //{
@@ -57,49 +57,115 @@ mcolor = htf(htfRes, _color(), gaps)
 // Calculate hist 
 hist    = htf(htfRes, macd - signal, 0)
 //}
-//}-----End of  MACD
-
-//*************** S/R ZONES ***************//
-// INPUTS
-//{
-usePrevZn = input(false, "Use Previous Bar as Zone")
 //}
 
-//ZONE MARKING
+//*************** S/R ZONES ***************//
+//{
+
+// FILTER FOR ZONE SELECTION
+//{
+useFilt = input(true, "Use Filter", group="FILTER")
+rsiRes = input("", "RSI Timeframe", input.resolution, group="FILTER")
+rsiLen = input(14, "RSI Length", input.integer, group="FILTER")
+rsiOb = input(65, "RSI Overbought", group="FILTER")
+rsiOs = input(35, "RSI Oversold", group="FILTER")
+
+htfRsi = htf(rsiRes, rsi(close, rsiLen), gaps)
+
+isRsiOb = htfRsi >= rsiOb
+isRsiOs = htfRsi <= rsiOs
+
+//}
+
+// ZONE MARKING
 // {
+
+//MACD HIST PIVOT POINT
 histIncBelow = htf(htfRes, rising(hist, 1), 0) and hist < 0
 histDecAbove = htf(htfRes, falling(hist, 1), 0) and hist > 0
 
-startIncBelow = htf(htfRes, histIncBelow[1] == false and histIncBelow == true, 0)
-startDecAbove = htf(htfRes, histDecAbove[1] == false and histDecAbove == true, 0)
+startIncBelow = useFilt ? htf(htfRes, histIncBelow[1] == false and histIncBelow == true, 0) and isRsiOs : 
+  htf(htfRes, histIncBelow[1] == false and histIncBelow == true, 0)
+  
+startDecAbove = useFilt ? htf(htfRes, histDecAbove[1] == false and histDecAbove == true, 0) and isRsiOb : 
+  htf(htfRes, histDecAbove[1] == false and histDecAbove == true, 0) 
 
 //To Mark out zone, mark the highs and the lows of the htf candles
-
-htfprevbarHigh = htf(htfRes, high[1], 0)
-htfprevbarLow = htf(htfRes, low[1], 0)
-
 htfbarHigh = htf(htfRes, high, 0)
 htfbarLow = htf(htfRes, low, 0)
 
-znHigh = startIncBelow or startDecAbove ?  usePrevZn ? htfprevbarHigh : htfbarHigh : na
-znLow = startIncBelow or startDecAbove ?  usePrevZn ? htfprevbarLow : htfbarLow : na
+longZnHigh = startIncBelow ? htfbarHigh : na
+longZnLow = startIncBelow ? htfbarLow : na
 
-var Top = 0.0
-var Bott = 0.0
+var longTop = 0.0
+var longBott = 0.0
 
-if (startIncBelow or startDecAbove)
-    Top := znHigh
-    Bott := znLow
+if (startIncBelow)
+    longTop := longZnHigh
+    longBott := longZnLow
+    
+shortZnHigh = startDecAbove ? htfbarHigh : na
+shortZnLow = startDecAbove ?  htfbarLow : na
+
+var shortTop = 0.0
+var shortBott = 0.0
+
+if (startDecAbove)
+    shortTop := shortZnHigh
+    shortBott := shortZnLow
 
 //}
 
+//}
+
+//*************** STRATEGY EXECUTIONS ***************//
+//{
+
+//FUNCTION
+InZone(_top, _bott, _index) => _index == 0 ? (high <= _top and high >= _bott ) or 
+  ( low <= _top and low >= _bott) or (high >= _top and low <= _bott) : 
+  (high[_index] <= _top and high[_index] >= _bott ) or 
+  ( low[_index] <= _top and low[_index] >= _bott) or (high[_index] >= _top and low[_index] <= _bott)
+ 
+//EXECUTION
+
+//FOR LONGS 
+prevBarInLongZn = InZone(longTop, longBott, 1)
+currBarInLongZn = InZone(longTop, longBott, 0)
+prevBarAboveLongZn = (not InZone(longTop, longBott, 1)) and low[1] > longTop
+prevBarBelowLongZn = (not InZone(longTop, longBott, 1)) and high[1] < longBott
+
+priceRetouchLong = prevBarAboveLongZn and  currBarInLongZn
+
+//FOR SHORTS
+prevBarInShortZn = InZone(shortTop, shortBott, 1)
+currBarInShortZn = InZone(shortTop, shortBott, 0)
+prevBarAboveShortZn = (not InZone(shortTop, shortBott, 1)) and low[1] > shortTop
+prevBarBelowShortZn = (not InZone(shortTop, shortBott, 1)) and high[1] < shortBott
+
+priceRetouchShort = prevBarBelowShortZn and  currBarInShortZn
+//}
 // PLOTS
 //{
 
-znTop = plot(startIncBelow or startDecAbove ? znHigh : na, title='Top', color=color.blue, style=plot.style_linebr, linewidth=2)
-znBott = plot(startIncBelow or startDecAbove ? znLow : na, title='Bottom', color=color.blue, style=plot.style_linebr, linewidth=2)
-fill(znTop, znBott, startIncBelow? color.new(color.olive, 80) : color.new(color.maroon, 80))
+// znTop = plot(startIncBelow or startDecAbove ? znHigh : na, title='Top', color=color.blue, style=plot.style_linebr, linewidth=2)
+// znBott = plot(startIncBelow or startDecAbove ? znLow : na, title='Bottom', color=color.blue, style=plot.style_linebr, linewidth=2)
+// fill(znTop, znBott, startIncBelow? color.new(color.olive, 80) : color.new(color.maroon, 80))
 
-bgcolor(startIncBelow ? color.new(color.lime, 70) : na)
-bgcolor(startDecAbove ? color.new(color.red, 70) : na)
+// bgcolor(startIncBelow ? color.new(color.lime, 70) : na)
+// bgcolor(startDecAbove ? color.new(color.red, 70) : na)
+
+//PLOTS FOR LONGS
+longZnTop = plot(longTop, "Long Zone Top", color.blue, linewidth=2)
+longZnBott = plot(longBott, "Long Zone Bottom", color.blue, linewidth=2)
+fill(longZnTop, longZnBott, color.new(color.olive, 80))
+
+//PLOTS FOR SHORTS
+shortZnTop = plot(shortTop, "Short Zone Top", color.blue, linewidth=2)
+shortZnBott = plot(shortBott, "Short Zone Bottom", color.blue, linewidth=2)
+fill(shortZnTop, shortZnBott, color.new(#e81c34, 80))
+
+// plotshape(priceRetouchShort, "Long", shape.triangleup, location.belowbar, color.lime, size = size.small)
+// plotshape(priceRetouchShort, "Short", shape.triangledown, location.abovebar, color.maroon, size = size.small)
+
 //}
