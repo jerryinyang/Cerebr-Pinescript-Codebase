@@ -1,0 +1,100 @@
+
+//@version=4
+study("MACD HIST", overlay=1)
+
+//***************  MACD ***************//
+//{
+
+/// INPUTS
+// {
+Res = input("60", " MACD TimeFrame", input.resolution)
+src = input(close, "Source",input.source)
+macdflen = 8
+macdslen = 17
+siglen = 9
+//}
+
+// FUNCTIONS
+// {
+_macd() =>
+    macdSrc     = close
+    FastMa = ema(macdSrc, macdflen)
+    SlowMa = ema(macdSrc, macdslen)
+    Macd    = FastMa - SlowMa
+    Signal  = ema(Macd, siglen)
+    Macd
+    
+_signal() =>
+    // Calculating
+    macdSrc     = close
+    FastMa = ema(macdSrc, macdflen)
+    SlowMa = ema(macdSrc, macdslen)
+    Macd    = FastMa - SlowMa
+    Signal  = ema(Macd, siglen)
+    Signal 
+
+_color() =>
+    // Calculating
+    macdSrc     = close
+    FastMa = ema(macdSrc, macdflen)
+    SlowMa = ema(macdSrc, macdslen)
+    Macd    = FastMa - SlowMa
+    Signal  = ema(Macd, siglen)
+    hist    = Macd - Signal
+    (hist>=0 ? (hist[1] < hist ? #26A69A : #B2DFDB) : (hist[1] < hist ? #FFCDD2 : #EF5350) )
+
+htf(_res, _exp, gaps_on)  => gaps_on == 0 ? security(syminfo.tickerid, _res, _exp) :
+  gaps_on == true ? security(syminfo.tickerid, _res, _exp, barmerge.gaps_on, barmerge.lookahead_off ) : 
+  security(syminfo.tickerid, _res, _exp, barmerge.gaps_off, barmerge.lookahead_off )
+
+//}
+
+// CALCULATION
+// {
+Macd   = htf(Res, _macd(), true)
+Signal = htf(Res, _signal(), true)
+mcolor = htf(Res, _color(), true)
+
+// Calculate hist 
+hist    = htf(Res, Macd - Signal, 0)
+//}
+//}-----End of  MACD
+
+//*************** S/R ZONES ***************//
+// INPUTS
+//{
+usePrevZn = input(false, "Use Previous Bar as Zone")
+//}
+
+//ZONE MARKING
+// {
+histIncBelow = htf(Res, rising(hist, 1), 0) and hist < 0
+histDecAbove = htf(Res, falling(hist, 1), 0) and hist > 0
+
+startIncBelow = htf(Res, histIncBelow[1] == false and histIncBelow == true, 0)
+startDecAbove = htf(Res, histDecAbove[1] == false and histDecAbove == true, 0)
+
+//To Mark out zone, mark the highs and the lows of the htf candles
+
+htfprevbarHigh = htf(Res, high[1], 0)
+htfprevbarLow = htf(Res, low[1], 0)
+
+htfbarHigh = htf(Res, high, 0)
+htfbarLow = htf(Res, low, 0)
+
+znHigh = usePrevZn ? htfprevbarHigh : htfbarHigh
+znLow = usePrevZn ? htfprevbarLow : htfbarLow
+
+//}
+
+// PLOTS
+//{
+// plot(hist, style = plot.style_histogram, color=mcolor, linewidth=3)
+
+znTop = plot(startIncBelow or startDecAbove ? znHigh : na, title='Top', color=color.blue, style=plot.style_linebr, linewidth=2)
+znBott = plot(startIncBelow or startDecAbove ? znLow : na, title='Bottom', color=color.blue, style=plot.style_linebr, linewidth=2)
+fill(znTop, znBott, startIncBelow ? color.new(color.olive, 80) : color.new(color.maroon, 80))
+
+bgcolor(startIncBelow ? color.new(color.lime, 70) : na)
+bgcolor(startDecAbove ? color.new(color.red, 70) : na)
+//}
