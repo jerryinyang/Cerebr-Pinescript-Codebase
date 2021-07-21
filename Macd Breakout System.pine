@@ -64,7 +64,7 @@ hist    = htf(htfRes, macd - signal, 0)
 
 // FILTER FOR ZONE SELECTION
 //{
-useFilt = input(true, "Use Filter", group="FILTER")
+useFilt = input(false, "Use Filter", group="FILTER")
 rsiRes = input("", "RSI Timeframe", input.resolution, group="FILTER")
 rsiLen = input(14, "RSI Length", input.integer, group="FILTER")
 rsiOb = input(65, "RSI Overbought", group="FILTER")
@@ -148,23 +148,31 @@ priceRetouchShort = prevBarBelowShortZn and  currBarInShortZn
 
 // PLOTS
 // {
+//PLOTS FOR BOTH
+// //{
+// znTop = plot(barssince(startIncBelow) < barssince(startDecAbove) ? longTop : shortTop, title='Top', 
+//   color=color.blue, style=plot.style_line, linewidth=2)
 
-// znTop = plot(startIncBelow or startDecAbove ? znHigh : na, title='Top', color=color.blue, style=plot.style_linebr, linewidth=2)
-// znBott = plot(startIncBelow or startDecAbove ? znLow : na, title='Bottom', color=color.blue, style=plot.style_linebr, linewidth=2)
-// fill(znTop, znBott, startIncBelow? color.new(color.olive, 80) : color.new(color.maroon, 80))
+// znBott = plot(barssince(startIncBelow) < barssince(startDecAbove) ? longBott : shortBott, title='Bottom', 
+//   color=color.blue, style=plot.style_linebr, linewidth=2)
+  
+// fill(znTop, znBott, barssince(startIncBelow) < barssince(startDecAbove)? color.new(color.olive, 80) : color.new(color.maroon, 80))
+// //}
 
-// bgcolor(startIncBelow ? color.new(color.lime, 70) : na)
-// bgcolor(startDecAbove ? color.new(color.red, 70) : na)
-
+atr = atr(14)
 //PLOTS FOR LONGS
 longZnTop = plot(longTop, "Long Zone Top", color.blue, linewidth=2)
-longZnBott = plot(longBott, "Long Zone Bottom", color.blue, linewidth=2)
-fill(longZnTop, longZnBott, color.new(color.olive, 80))
+longZnBott = plot(longBott, "Long Zone Bottom", color.new(color.blue, 70), linewidth=2)
+longZnStop = plot(longBott - atr, "Long Zone Stop", color.new(color.gray, 70), linewidth=2)
+fill(longZnTop, longZnBott, color.new(color.olive, 75))
+fill(longZnStop, longZnBott, color.new(color.olive, 90))
 
 //PLOTS FOR SHORTS
-shortZnTop = plot(shortTop, "Short Zone Top", color.blue, linewidth=2)
+shortZnTop = plot(shortTop, "Short Zone Top", color.new(color.blue, 70), linewidth=2)
 shortZnBott = plot(shortBott, "Short Zone Bottom", color.blue, linewidth=2)
-fill(shortZnTop, shortZnBott, color.new(#e81c34, 80))
+shortZnStop = plot(shortTop + atr, "Short Zone Stop", color.new(color.gray, 70), linewidth=2)
+fill(shortZnTop, shortZnBott, color.new(#e81c34, 75))
+fill(shortZnStop, shortZnTop, color.new(#e81c34, 90))
 
 // plotshape(priceRetouchShort, "Long", shape.triangleup, location.belowbar, color.lime, size = size.small)
 // plotshape(priceRetouchShort, "Short", shape.triangledown, location.abovebar, color.maroon, size = size.small)
