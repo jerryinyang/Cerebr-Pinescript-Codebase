@@ -2,168 +2,24 @@
 //@version=4
 study("MACD Breakout", overlay=1)
 
-//***************  MACD ***************//
+
+// GENERAL FUNCTIONS
 // {
-
-/// INPUTS
-// {
-htfRes = input("60", " MACD TimeFrame", input.resolution, group="MACD SETTINGS")
-macdflen = input(8, "MACD Fast MA", input.integer, group="MACD SETTINGS")
-macdslen = input(17, "macd Slow MA", input.integer, group="MACD SETTINGS")
-siglen = input(9, "MACD signal Line", input.integer, group="MACD SETTINGS")
-gaps = input(true, "Gaps")
-//}
-
-// FUNCTIONS
-// {
-_macd() =>
-    macdSrc     = close
-    FastMa = ema(macdSrc, macdflen)
-    SlowMa = ema(macdSrc, macdslen)
-    macd    = FastMa - SlowMa
-    macd
-    
-_signal() =>
-    // Calculating
-    macdSrc     = close
-    FastMa = ema(macdSrc, macdflen)
-    SlowMa = ema(macdSrc, macdslen)
-    macd    = FastMa - SlowMa
-    signal  = ema(macd, siglen)
-    signal 
-
-_color() =>
-    // Calculating
-    macdSrc     = close
-    FastMa = ema(macdSrc, macdflen)
-    SlowMa = ema(macdSrc, macdslen)
-    macd    = FastMa - SlowMa
-    signal  = ema(macd, siglen)
-    hist    = macd - signal
-    (hist>=0 ? (hist[1] < hist ? #26A69A : #B2DFDB) : (hist[1] < hist ? #FFCDD2 : #EF5350) )
-
 htf(_res, _exp, gaps_on)  => gaps_on == 0 ? security(syminfo.tickerid, _res, _exp) :
   gaps_on == true ? security(syminfo.tickerid, _res, _exp, barmerge.gaps_on, barmerge.lookahead_off ) : 
   security(syminfo.tickerid, _res, _exp, barmerge.gaps_off, barmerge.lookahead_off )
-
-//}
-
-// CALCULATION
-// {
-macd   = htf(htfRes, _macd(), gaps)
-signal = htf(htfRes, _signal(), gaps)
-mcolor = htf(htfRes, _color(), gaps)
-
-// Calculate hist 
-hist    = htf(htfRes, macd - signal, 0)
-//}
-//}
-
-//*************** S/R ZONES ***************//
-// {
-
-// FILTER FOR ZONE SELECTION
-//{
-useFilt = input(false, "Use Filter", group="FILTER")
-rsiRes = input("", "RSI Timeframe", input.resolution, group="FILTER")
-rsiLen = input(14, "RSI Length", input.integer, group="FILTER")
-rsiOb = input(65, "RSI Overbought", group="FILTER")
-rsiOs = input(35, "RSI Oversold", group="FILTER")
-
-htfRsi = htf(rsiRes, rsi(close, rsiLen), gaps)
-
-isRsiOb = htfRsi >= rsiOb
-isRsiOs = htfRsi <= rsiOs
-
-//}
-
-// ZONES
-// {
-
-//MACD HIST PIVOT POINT
-histIncBelow = htf(htfRes, rising(hist, 1), 0) and hist < 0
-histDecAbove = htf(htfRes, falling(hist, 1), 0) and hist > 0
-
-startIncBelow = useFilt ? htf(htfRes, histIncBelow[1] == false and histIncBelow == true, 0) and isRsiOs : 
-  htf(htfRes, histIncBelow[1] == false and histIncBelow == true, 0)
   
-startDecAbove = useFilt ? htf(htfRes, histDecAbove[1] == false and histDecAbove == true, 0) and isRsiOb : 
-  htf(htfRes, histDecAbove[1] == false and histDecAbove == true, 0) 
-
-//To Mark out zone, mark the highs and the lows of the htf candles
-htfbarHigh = htf(htfRes, high, 0)
-htfbarLow = htf(htfRes, low, 0)
-
-longZnHigh = startIncBelow ? htfbarHigh : na
-longZnLow = startIncBelow ? htfbarLow : na
-
-var longTop = 0.0
-var longBott = 0.0
-
-if (startIncBelow)
-    longTop := longZnHigh
-    longBott := longZnLow
-    
-shortZnHigh = startDecAbove ? htfbarHigh : na
-shortZnLow = startDecAbove ?  htfbarLow : na
-
-var shortTop = 0.0
-var shortBott = 0.0
-
-if (startDecAbove)
-    shortTop := shortZnHigh
-    shortBott := shortZnLow
-
-//}
-
-//}
-
-//*************** STRATEGY EXECUTIONS ***************//
-// {
-
-//FUNCTION
-InZone(_top, _bott, _index) => _index == 0 ? (high <= _top and high >= _bott ) or 
+barInZone(_top, _bott, _index) => _index == 0 ? (high <= _top and high >= _bott ) or 
   ( low <= _top and low >= _bott) or (high >= _top and low <= _bott) : 
   (high[_index] <= _top and high[_index] >= _bott ) or 
   ( low[_index] <= _top and low[_index] >= _bott) or (high[_index] >= _top and low[_index] <= _bott)
- 
-//EXECUTION
+  
+znInZone(_top, _bott, _top2, _bott2) => (_top2 <= _top and _top2 >= _bott ) or ( _bott2 <= _top and _bott2 >= _bott) or (_top2 >= _top and _bott2 <= _bott)
 
-//FOR LONGS 
-prevBarInLongZn = InZone(longTop, longBott, 1)
-currBarInLongZn = InZone(longTop, longBott, 0)
-prevBarAboveLongZn = (not InZone(longTop, longBott, 1)) and low[1] > longTop
-prevBarBelowLongZn = (not InZone(longTop, longBott, 1)) and high[1] < longBott
-
-priceRetouchLong = prevBarAboveLongZn and  currBarInLongZn
-
-//FOR SHORTS
-prevBarInShortZn = InZone(shortTop, shortBott, 1)
-currBarInShortZn = InZone(shortTop, shortBott, 0)
-prevBarAboveShortZn = (not InZone(shortTop, shortBott, 1)) and low[1] > shortTop
-prevBarBelowShortZn = (not InZone(shortTop, shortBott, 1)) and high[1] < shortBott
-
-priceRetouchShort = prevBarBelowShortZn and  currBarInShortZn
-//}
-
-// PLOTS
-// {
-//@version=4
-study("MACD Breakout", overlay=1)
-
-
-// FUNCTIONS
-//{
-htf(_res, _exp, gaps_on)  => gaps_on == 0 ? security(syminfo.tickerid, _res, _exp) :
-  gaps_on == true ? security(syminfo.tickerid, _res, _exp, barmerge.gaps_on, barmerge.lookahead_off ) : 
-  security(syminfo.tickerid, _res, _exp, barmerge.gaps_off, barmerge.lookahead_off )
+lineInZone(_top, _bott, _line) => (_line <= _top and _line >= _bott )
 //}
 
 // INPUTS 
-//{
-
-//}
-
 
 //*************** MACD ***************//
 // {
@@ -187,7 +43,7 @@ _macd() =>
     macd
     
 _signal() =>
-    // Calculating
+
     macdSrc     = close
     FastMa = ema(macdSrc, macdflen)
     SlowMa = ema(macdSrc, macdslen)
@@ -195,34 +51,25 @@ _signal() =>
     signal  = ema(macd, siglen)
     signal 
 
-_color() =>
-    // Calculating
-    macdSrc     = close
-    FastMa = ema(macdSrc, macdflen)
-    SlowMa = ema(macdSrc, macdslen)
-    macd    = FastMa - SlowMa
-    signal  = ema(macd, siglen)
-    hist    = macd - signal
-    (hist>=0 ? (hist[1] < hist ? #26A69A : #B2DFDB) : (hist[1] < hist ? #FFCDD2 : #EF5350) )
-
 //}
 
 // CALCULATION
 // {
 macd   = htf(htfRes, _macd(), gaps)
 signal = htf(htfRes, _signal(), gaps)
-mcolor = htf(htfRes, _color(), gaps)
 
 // Calculate hist 
 hist    = htf(htfRes, macd - signal, 0)
 //}
+
+
 //}
 
 //*************** S/R ZONES ***************//
 // {
 
 // FILTER FOR ZONE SELECTION
-//{
+// {
 useFilt = input(false, "Use Filter", group="FILTER")
 useMacdFilt = input(true, "Use Macd Zero Line Filter", input.bool, group="FILTER")
 
@@ -230,7 +77,7 @@ useMacdFilt = input(true, "Use Macd Zero Line Filter", input.bool, group="FILTER
 //{
 
 // INPUT
-stRsiRes = input("120", "Stoch RSI Timeframe", group="FILTER")
+stRsiRes = input("120", "Stoch RSI Timeframe", input.resolution, group="FILTER")
 smoothK = input(3, "K", minval=1, group="FILTER")
 smoothD = input(3, "D", minval=1, group="FILTER")
 lengthRSI = input(14, "RSI Length", minval=1, group="FILTER")
@@ -250,13 +97,17 @@ isFiltOs = stoch <= filtOs
 //}
 
 //}
+/////////////////////////////////////////
 
 // ZONES
 // {
 
 //MACD HIST PIVOT POINT
-histIncBelow = useMacdFilt ? htf(htfRes, rising(hist, 1), 0) and hist < 0 and macd < 0 : htf(htfRes, rising(hist, 1), 0) and hist < 0 
-histDecAbove = useMacdFilt ? htf(htfRes, falling(hist, 1), 0) and hist > 0 and macd > 0 : htf(htfRes, falling(hist, 1), 0) and hist > 0
+histIncBelow = useMacdFilt ? htf(htfRes, rising(hist, 1), 0) and hist < 0 and macd < 0 : 
+  htf(htfRes, rising(hist, 1), 0) and hist < 0 
+  
+histDecAbove = useMacdFilt ? htf(htfRes, falling(hist, 1), 0) and hist > 0 and macd > 0 : 
+  htf(htfRes, falling(hist, 1), 0) and hist > 0
 
 startIncBelow = useFilt ? htf(htfRes, histIncBelow[1] == false and histIncBelow == true, 0) and isFiltOs : 
   htf(htfRes, histIncBelow[1] == false and histIncBelow == true, 0)
@@ -295,91 +146,146 @@ if (startDecAbove)
 //*************** STRATEGY EXECUTIONS ***************//
 // {
 
-//FUNCTION
-InZone(_top, _bott, _index) => _index == 0 ? (high <= _top and high >= _bott ) or 
-  ( low <= _top and low >= _bott) or (high >= _top and low <= _bott) : 
-  (high[_index] <= _top and high[_index] >= _bott ) or 
-  ( low[_index] <= _top and low[_index] >= _bott) or (high[_index] >= _top and low[_index] <= _bott)
- 
-//EXECUTION
+// TRIGGER
+// {
 
-//FOR LONGS 
-prevBarInLongZn = InZone(longTop, longBott, 1)
-currBarInLongZn = InZone(longTop, longBott, 0)
-prevBarAboveLongZn = (not InZone(longTop, longBott, 1)) and low[1] > longTop
-prevBarBelowLongZn = (not InZone(longTop, longBott, 1)) and high[1] < longBott
+// NOTE: This method references two bars behind; Current bar is the execution bar//
+// DETECTING ENTRY TRIGGER FOR LONGS 
+// {
+prevBar2InLongZn = barInZone(longTop, longBott, 2)
+prevBar2AboveLongZn = (not prevBar2InLongZn) and low[2] > longTop
+prevBar2BelowLongZn = (not prevBar2InLongZn) and high[2] < longBott
 
-priceRetouchLong = prevBarAboveLongZn and  currBarInLongZn
+prevBarInLongZn = barInZone(longTop, longBott, 1)
+prevBarAboveLongZn = (not prevBarInLongZn) and low[1] > longTop
+prevBarBelowLongZn = (not prevBarInLongZn) and high[1] < longBott
 
-//FOR SHORTS
-prevBarInShortZn = InZone(shortTop, shortBott, 1)
-currBarInShortZn = InZone(shortTop, shortBott, 0)
-prevBarAboveShortZn = (not InZone(shortTop, shortBott, 1)) and low[1] > shortTop
-prevBarBelowShortZn = (not InZone(shortTop, shortBott, 1)) and high[1] < shortBott
 
-priceRetouchShort = prevBarBelowShortZn and  currBarInShortZn
+// Find the first bar to leave the zone, after the new zone forms
+barLeavesLongZn = prevBar2InLongZn and (not prevBarInLongZn)
+
+longEntryValid = barLeavesLongZn and low[1] > longTop
+longEntryInvalid = barLeavesLongZn and high[1] < longBott
+//}
+
+// DETECTING ENTRY TRIGGER FOR SHORTS 
+// {
+prevBar2InShortZn = barInZone(shortTop, shortBott, 2)
+prevBar2AboveShortZn = (not prevBar2InShortZn) and low[2] > shortTop
+prevBar2BelowShortZn = (not prevBar2InShortZn) and high[2] < shortBott
+
+prevBarInShortZn = barInZone(shortTop, shortBott, 1)
+prevBarAboveShortZn = (not prevBarInShortZn) and low[1] > shortTop
+prevBarBelowShortZn = (not prevBarInShortZn) and high[1] < shortBott
+
+
+// Find the first bar to leave the zone, after the new zone forms
+barLeavesShortZn = prevBar2InShortZn and (not prevBarInShortZn)
+
+shortEntryValid = barLeavesShortZn and high[1] < shortBott
+shortEntryInvalid = barLeavesShortZn and low[1] > shortTop
+//}
+
+//}
+/////////////////////////////////////////
+
+// SCREENER
+// {
+// SCREENING ENTRY CONDITIONS FOR LONGS 
+// {
+var goLongValid = false
+var pendingLong = false
+
+newLongZn = change(longTop) or change(longBott)
+
+if newLongZn
+    goLongValid := false
+    pendingLong := false
+
+if longEntryInvalid
+    goLongValid := false
+    pendingLong := false    
+    
+if barssince(longEntryInvalid) < barssince(newLongZn)
+    goLongValid := false
+    pendingLong := false
+    
+else if longEntryValid
+    goLongValid := true
+    pendingLong := true
+    
+//}
+//Signals ==> pendingLong
+
+// SCREENING ENTRY CONDITIONS FOR SHORTS 
+// {
+var goShortValid = false
+var pendingShort = false
+
+newShortZn = change(shortTop) or change(shortBott)
+
+if newShortZn
+    goShortValid := false
+    pendingShort := false
+    
+if shortEntryInvalid
+    goShortValid := false
+    pendingShort := false    
+    
+if barssince(shortEntryInvalid) < barssince(newShortZn)
+    goShortValid := false
+    pendingShort := false
+    
+if shortEntryValid
+    goShortValid := true
+    pendingShort := true
+//}
+//Signals ==> pendingShort
+// }
+/////////////////////////////////////////
+
+// EXECUTIONS
+
+// FOR STUDY
+currBarInLongZn = barInZone(longTop, longBott, 0)
+currBarInShortZn = barInZone(shortTop, shortBott, 0)
+
+priceRetouchLong = pendingLong and prevBarAboveLongZn and  currBarInLongZn
+priceRetouchShort = pendingShort and prevBarBelowShortZn and  currBarInShortZn
+
+/////////////////////////////////////////
+
+//FOR STRATEGY
+
+
+//}
+
+//*************** RISK MANAGEMENT ***************//
+//{
+slAtrLen = input(14, "SL ATR Length", input.integer, minval=1, group="RISK MANAGEMENT")
+slAtrMult = input(1, "Multiplier", input.float, minval=0.01, step=0.25, group="RISK MANAGEMENT")
+
+slAtr = atr(slAtrLen) * slAtrMult
 //}
 
 // PLOTS
 // {
 
-//PLOTS FOR BOTH
-// //{
-// znTop = plot(barssince(startIncBelow) < barssince(startDecAbove) ? longTop : shortTop, title='Top', 
-//   color=color.blue, style=plot.style_line, linewidth=2)
-
-// znBott = plot(barssince(startIncBelow) < barssince(startDecAbove) ? longBott : shortBott, title='Bottom', 
-//   color=color.blue, style=plot.style_linebr, linewidth=2)
-  
-// fill(znTop, znBott, barssince(startIncBelow) < barssince(startDecAbove)? color.new(color.olive, 80) : color.new(color.maroon, 80))
-// //}
-
-atr = atr(14)
 //PLOTS FOR LONGS
 longZnTop = plot(longTop, "Long Zone Top", color.blue, linewidth=2)
 longZnBott = plot(longBott, "Long Zone Bottom", color.new(color.blue, 70), linewidth=2)
-longZnStop = plot(longBott - atr, "Long Zone Stop", color.new(color.gray, 70), linewidth=2)
+longZnStop = plot(longBott - slAtr, "Long Zone Stop", color.new(color.gray, 70), linewidth=2)
 fill(longZnTop, longZnBott, color.new(color.olive, 75))
 fill(longZnStop, longZnBott, color.new(color.olive, 90))
 
 //PLOTS FOR SHORTS
 shortZnTop = plot(shortTop, "Short Zone Top", color.new(color.blue, 70), linewidth=2)
 shortZnBott = plot(shortBott, "Short Zone Bottom", color.blue, linewidth=2)
-shortZnStop = plot(shortTop + atr, "Short Zone Stop", color.new(color.gray, 70), linewidth=2)
+shortZnStop = plot(shortTop + slAtr, "Short Zone Stop", color.new(color.gray, 70), linewidth=2)
 fill(shortZnTop, shortZnBott, color.new(#e81c34, 75))
 fill(shortZnStop, shortZnTop, color.new(#e81c34, 90))
 
-// plotshape(priceRetouchShort, "Long", shape.triangleup, location.belowbar, color.lime, size = size.small)
-// plotshape(priceRetouchShort, "Short", shape.triangledown, location.abovebar, color.maroon, size = size.small)
-
-//}
-//PLOTS FOR BOTH
-// //{
-// znTop = plot(barssince(startIncBelow) < barssince(startDecAbove) ? longTop : shortTop, title='Top', 
-//   color=color.blue, style=plot.style_line, linewidth=2)
-
-// znBott = plot(barssince(startIncBelow) < barssince(startDecAbove) ? longBott : shortBott, title='Bottom', 
-//   color=color.blue, style=plot.style_linebr, linewidth=2)
-  
-// fill(znTop, znBott, barssince(startIncBelow) < barssince(startDecAbove)? color.new(color.olive, 80) : color.new(color.maroon, 80))
-// //}
-
-atr = atr(14)
-//PLOTS FOR LONGS
-longZnTop = plot(longTop, "Long Zone Top", color.blue, linewidth=2)
-longZnBott = plot(longBott, "Long Zone Bottom", color.new(color.blue, 70), linewidth=2)
-longZnStop = plot(longBott - atr, "Long Zone Stop", color.new(color.gray, 70), linewidth=2)
-fill(longZnTop, longZnBott, color.new(color.olive, 75))
-fill(longZnStop, longZnBott, color.new(color.olive, 90))
-
-//PLOTS FOR SHORTS
-shortZnTop = plot(shortTop, "Short Zone Top", color.new(color.blue, 70), linewidth=2)
-shortZnBott = plot(shortBott, "Short Zone Bottom", color.blue, linewidth=2)
-shortZnStop = plot(shortTop + atr, "Short Zone Stop", color.new(color.gray, 70), linewidth=2)
-fill(shortZnTop, shortZnBott, color.new(#e81c34, 75))
-fill(shortZnStop, shortZnTop, color.new(#e81c34, 90))
-
-// plotshape(priceRetouchShort, "Long", shape.triangleup, location.belowbar, color.lime, size = size.small)
-// plotshape(priceRetouchShort, "Short", shape.triangledown, location.abovebar, color.maroon, size = size.small)
+plotshape(priceRetouchLong, "Long", shape.triangleup, location.belowbar, color.lime, size = size.small)
+plotshape(priceRetouchShort, "Short", shape.triangledown, location.abovebar, color.maroon, size = size.small)
 
 //}

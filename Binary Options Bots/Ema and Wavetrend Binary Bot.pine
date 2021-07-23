@@ -245,8 +245,8 @@ if goShort[optLen + 1]
 
 plotshape(gain, "Gain", shape.flag, location.top, color.lime, size = size.small)
 plotshape(loss, "Loss", shape.flag, location.top, color.maroon, size = size.small)
-plot(countGain, color=color.new(color.olive, 100))
-plot(countLoss, color=color.new(color.purple, 100))
+plot(countGain, color=color.new(color.olive, 100), display=false)
+plot(countLoss, color=color.new(color.purple, 100), display=false)
 
 //}
 
