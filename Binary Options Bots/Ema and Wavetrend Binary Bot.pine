@@ -248,6 +248,14 @@ plotshape(loss, "Loss", shape.flag, location.top, color.maroon, size = size.smal
 plot(countGain, color=color.new(color.olive, 100))
 plot(countLoss, color=color.new(color.purple, 100))
 
+var table count = table.new(position.top_right, 2, 1)
+// We call `atr()` outside the `if` block so it executes on each bar.
+myAtr = atr(14)
+if barstate.islast
+    // We only populate the table on the last bar.
+    table.cell(atrDisplay, 0, 0, tostring(countGain))
+    table.cell(atrDisplay, 0, 1, tostring(countLoss))
+
 //}
 
 

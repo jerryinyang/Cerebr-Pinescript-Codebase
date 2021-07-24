@@ -1,0 +1,219 @@
+//FUNCTIONS
+// {
+htf(_res, _exp, gaps_on)  => gaps_on == 0 ? security(syminfo.tickerid, _res, _exp) :
+  gaps_on == true ? security(syminfo.tickerid, _res, _exp, barmerge.gaps_on, barmerge.lookahead_off ) : 
+  security(syminfo.tickerid, _res, _exp, barmerge.gaps_off, barmerge.lookahead_off )
+  
+barInZone(_top, _bott, _index) => _index == 0 ? (high <= _top and high >= _bott ) or 
+  ( low <= _top and low >= _bott) or (high >= _top and low <= _bott) : 
+  (high[_index] <= _top and high[_index] >= _bott ) or 
+  ( low[_index] <= _top and low[_index] >= _bott) or (high[_index] >= _top and low[_index] <= _bott)
+  
+znInZone(_top, _bott, _top2, _bott2) => (_top2 <= _top and _top2 >= _bott ) or ( _bott2 <= _top and _bott2 >= _bott) or (_top2 >= _top and _bott2 <= _bott)
+
+lineInZone(_top, _bott, _line) => (_line <= _top and _line >= _bott )
+
+// }
+
+
+
+
+//*************** INDICATORS ***************//
+// {
+
+//***** EMA *****//
+// {
+
+emaRes = input("15", "EMA Timeframe", input.resolution)
+emaLen = input(100, "EMA Length", input.integer, minval=1)
+
+ema = emaRes == "" ? ema(close, emaLen) : htf(emaRes, ema(close, emaLen), false)
+
+plot(ema)
+// }
+// Signals ==> ema
+
+
+//***** KELTNER CHANNEL *****//
+// {
+kCRes = input("15", "HTF Timeframe", input.resolution, group="KELTNER CHANNEL")
+kCSrc = close
+kCLength = input(100, "KC Length", input.integer, group="KELTNER CHANNEL")
+kCMult = input(0.5, "HTF Multiplier", input.float, step=0.05, minval=0.05, group="KELTNER CHANNEL")
+kCRange = input("ATR", "Range Style", options=["ATR", "True Range", "Bar Width"], group="KELTNER CHANNEL")
+kCRangeLen = input(10, "Range Period", group="KELTNER CHANNEL")
+
+f_kc(src, length, mult, kcRange, rangeLen, res) =>
+    float basis = security(syminfo.tickerid, res, ema(src, length), barmerge.gaps_off, barmerge.lookahead_off)
+    float span = kcRange == "ATR" ? security(syminfo.tickerid, res, atr(rangeLen), barmerge.gaps_off, barmerge.lookahead_off) : 
+      kcRange == "True Range" ? security(syminfo.tickerid, res, tr, barmerge.gaps_off, barmerge.lookahead_off) : 
+      kcRange == "Bar Width" ? security(syminfo.tickerid, res, (high - low), barmerge.gaps_off, barmerge.lookahead_off) : na
+      
+    float rangeEma = ema(span, length)
+    
+    security(syminfo.tickerid, res, (high - low), barmerge.gaps_off, barmerge.lookahead_off)
+    
+    upperKC = basis + (rangeEma * mult)
+    middleKC = basis
+    lowerKC = basis - (rangeEma * mult)
+    
+    [middleKC, upperKC, lowerKC]
+    
+    
+[kCMiddle, kCUpper, kCLower] = f_kc(kCSrc, kCLength, kCMult, kCRange, kCRangeLen, kCRes)
+//}
+//Buffers ==> kCMiddle, kCUpper, kCLower
+
+
+//***** STOCHASTIC RSI *****//
+// {
+
+// INPUT
+stRsiRes = input("", "Stoch RSI Timeframe", input.resolution, group="FILTER")
+smoothK = input(3, "K", minval=1, group="FILTER")
+smoothD = input(3, "D", minval=1, group="FILTER")
+lengthRSI = input(14, "RSI Length", minval=1, group="FILTER")
+lengthStoch = input(14, "Stochastic Length", minval=1, group="FILTER")
+stOb = input(80, "RSI Overbought", group="FILTER")
+stOs = input(20, "RSI Oversold", group="FILTER")
+src = close
+
+//CALCULATIONS
+rsi1 = htf(stRsiRes, rsi(src, lengthRSI), false)
+stoch = htf(stRsiRes, sma(stoch(rsi1, rsi1, rsi1, lengthStoch), smoothK), false)
+stSignal = htf(stRsiRes, sma(stoch, smoothD), false)
+
+isStOb = stoch >= stOb
+isStOs = stoch <= stOs
+
+stGoesOb = (not isStOb[1]) and isStOb
+stGoesOs = (not isStOs[1]) and isStOs
+
+stLong = isStOs and barssince(crossover(stoch, stSignal)) < barssince(stGoesOs)
+stShort = isStOb and barssince(crossunder(stoch, stSignal)) < barssince(stGoesOb)
+
+//}
+//SIGNAL ==> stLong, stShort
+
+
+//***** HEIKEN ASHI *****//
+// {
+
+ha_t = heikinashi(syminfo.tickerid)
+
+haRes = input('60', "Heiken Ashi Timeframe", input.resolution, group="HEIKEN ASHI")
+ha_open = security(ha_t, haRes, open)
+ha_close = security(ha_t, haRes, close)
+ha_dif = ha_open - ha_close
+ha_diff = iff(ha_dif > 0, 1, iff(ha_dif<0, 2, 3))
+
+haLong = ha_diff == 2
+haShort = ha_diff == 1
+
+// }
+// Signals ==> haLong, haShort
+
+// }
+
+
+//***** WAVE TREND *****//
+// {
+
+wtRes = input("", "Wave Trend Timeframe", input.resolution, group="WAVE TREND")
+wtChannelLen = input(10, "Channel Length", group="WAVE TREND")
+wtAvgLen = input(21, "Average Length", group="WAVE TREND")
+wtOb = input(30, "WT Overbought", group="WAVE TREND")
+wtOs = input(-30, "WT Oversold", group="WAVE TREND")
+wtUseObOs = input(false, "Use Wave Trend Overbought/Oversold Levels", group="WAVE TREND")
+ 
+wtSrc = htf(wtRes, hlc3, false)
+wtEsa = htf(wtRes, ema(wtSrc, wtChannelLen), false)
+d = htf(wtRes, ema(abs(wtSrc - wtEsa), wtChannelLen), false)
+ci = (wtSrc - wtEsa) / (0.015 * d)
+tci = ema(ci, wtAvgLen)
+
+wtLine = tci
+wtSignal = sma(wtLine,4)
+wtHist = wtLine - wtSignal
+
+isWtOb = wtUseObOs ? wtLine >= wtOb : wtLine >= 0
+isWtOs = wtUseObOs ? wtLine <= wtOs : wtLine <= 0
+
+wtLong = crossover(wtLine, wtSignal) and isWtOs
+wtShort = crossunder(wtLine, wtSignal) and isWtOb
+
+// }
+// Signals ==> wtLong, wtShort
+
+//***** MACD *****//
+// {
+
+/// INPUTS
+// {
+macdRes = input("", " MACD TimeFrame", input.resolution, group="MACD")
+macdflen = input(12, "MACD Fast MA", input.integer, group="MACD")
+macdslen = input(25, "macd Slow MA", input.integer, group="MACD")
+siglen = input(9, "MACD signal Line", input.integer, group="MACD")
+// }
+
+// MACD FUNCTIONS
+// {
+_macd() =>
+    macdSrc     = close
+    FastMa = ema(macdSrc, macdflen)
+    SlowMa = ema(macdSrc, macdslen)
+    macd    = FastMa - SlowMa
+    macd
+    
+_signal() =>
+    macdSrc     = close
+    FastMa = ema(macdSrc, macdflen)
+    SlowMa = ema(macdSrc, macdslen)
+    macd    = FastMa - SlowMa
+    signal  = ema(macd, siglen)
+    signal 
+
+_color() =>
+    macdSrc     = close
+    FastMa = ema(macdSrc, macdflen)
+    SlowMa = ema(macdSrc, macdslen)
+    macd    = FastMa - SlowMa
+    signal  = ema(macd, siglen)
+    hist    = macd - signal
+    (hist>=0 ? (hist[1] < hist ? #26A69A : #B2DFDB) : (hist[1] < hist ? #FFCDD2 : #EF5350) )
+
+// }
+
+// CALCULATION
+// {
+macd   = macdRes != "" ? htf(macdRes, _macd(), true) : _macd()
+signal = macdRes != "" ? htf(macdRes, _signal(), true) : _signal()
+hist    = macdRes != "" ? htf(macdRes, macd - signal, 0) : macd - signal
+
+histIncBelow = macdRes != "" ? htf(macdRes, rising(hist, 1), 0) and hist < 0 : rising(hist, 1) and hist < 0 
+histDecBelow = macdRes != "" ? htf(macdRes, falling(hist, 1), 0) and hist < 0 : falling(hist, 1) and hist < 0 
+histIncAbove = macdRes != "" ? htf(macdRes, rising(hist, 1), 0) and hist > 0 : rising(hist, 1) and hist > 0
+histDecAbove = macdRes != "" ? htf(macdRes, falling(hist, 1), 0) and hist > 0 : falling(hist, 1) and hist > 0
+// }
+
+
+// }
+// Signals ==> histIncBelow, histDecBelow, histIncAbove, histDecAbove
+
+
+//***** HMA *****//
+// {
+hmaSrc = close
+hmaLen = input(200, "HMA Period", group = "HMA")
+hmaRes = input("", "HMA Timeframe", input.resolution, group = "HMA")
+period = input(2, "Rise or Fall Period", input.integer, group = "HMA")
+
+//*************************************************//
+
+hma = hmaRes != "" ? htf(hmaRes, hma(hmaSrc, hmaLen), true) : hma(hmaSrc, hmaLen)
+hmaRise = rising(hma, period)
+hmaFall = falling(hma, period)
+
+plot(hma, color= hmaRise ? color.lime : color.maroon, linewidth=2)
+// }
+// Signals ==> hmaFall and hmaRise
