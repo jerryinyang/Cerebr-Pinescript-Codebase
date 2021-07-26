@@ -1,0 +1,221 @@
+
+//@version=4
+study("EMA BREAKOUT", overlay=1)
+
+//=============== GENERAL FUNCTIONS ===============//
+// {
+htf(_res, _exp, gaps_on)  => gaps_on == 0 ? security(syminfo.tickerid, _res, _exp) :
+  gaps_on == true ? security(syminfo.tickerid, _res, _exp, barmerge.gaps_on, barmerge.lookahead_off ) : 
+  security(syminfo.tickerid, _res, _exp, barmerge.gaps_off, barmerge.lookahead_off )
+  
+barInZone(_top, _bott, _index) => _index == 0 ? (high <= _top and high >= _bott ) or 
+  ( low <= _top and low >= _bott) or (high >= _top and low <= _bott) : 
+  (high[_index] <= _top and high[_index] >= _bott ) or 
+  ( low[_index] <= _top and low[_index] >= _bott) or (high[_index] >= _top and low[_index] <= _bott)
+  
+znInZone(_top, _bott, _top2, _bott2) => (_top2 <= _top and _top2 >= _bott ) or ( _bott2 <= _top and _bott2 >= _bott) or (_top2 >= _top and _bott2 <= _bott)
+
+lineInZone(_top, _bott, _line) => (_line <= _top and _line >= _bott )
+
+// }
+
+// {
+useStrictBreak = input(true, "Use Strick Breakout Rule", input.bool)
+useMeth  = input("Strategy 1", "Choose Strategy", options=["Both" ,"Strategy 1", "Strategy 2"])
+//}
+
+//=============== INDICATORS ===============//
+// {
+
+//***** EMA *****//
+// {
+emaRes = input("", "EMA Timeframe", input.resolution, group="EMA")
+emaLen = input(30, "EMA Length", input.integer, minval=1, group="EMA")
+
+ema = emaRes == "" ? ema(close, emaLen) : htf(emaRes, ema(close, emaLen), false)
+
+// }
+// Signals ==> ema
+
+//***** KELTNER CHANNEL *****//
+// {
+kCRes = input("15", "HTF Timeframe", input.resolution, group="KELTNER CHANNEL")
+kCSrc = close
+kCLength = input(100, "KC Length", input.integer, group="KELTNER CHANNEL")
+kCMult = input(0.25, "HTF Multiplier", input.float, step=0.05, minval=0.05, group="KELTNER CHANNEL")
+kCRange = input("ATR", "Range Style", options=["ATR", "True Range", "Bar Width"], group="KELTNER CHANNEL")
+kCRangeLen = input(14, "Range Period", group="KELTNER CHANNEL")
+
+f_kc(src, length, mult, kcRange, rangeLen, res) =>
+    float basis = security(syminfo.tickerid, res, ema(src, length), barmerge.gaps_off, barmerge.lookahead_off)
+    float span = kcRange == "ATR" ? security(syminfo.tickerid, res, atr(rangeLen), barmerge.gaps_off, barmerge.lookahead_off) : 
+      kcRange == "True Range" ? security(syminfo.tickerid, res, tr, barmerge.gaps_off, barmerge.lookahead_off) : 
+      kcRange == "Bar Width" ? security(syminfo.tickerid, res, (high - low), barmerge.gaps_off, barmerge.lookahead_off) : na
+      
+    float rangeEma = ema(span, length)
+    
+    security(syminfo.tickerid, res, (high - low), barmerge.gaps_off, barmerge.lookahead_off)
+    
+    upperKC = basis + (rangeEma * mult)
+    middleKC = basis
+    lowerKC = basis - (rangeEma * mult)
+    
+    [middleKC, upperKC, lowerKC]
+    
+    
+[kCMiddle, kCUpper, kCLower] = f_kc(kCSrc, kCLength, kCMult, kCRange, kCRangeLen, kCRes)
+//}
+//Buffers ==> kCMiddle, kCUpper, kCLower
+
+//} 
+
+
+//=============== FILTERS ===============//
+// {
+
+// INPUT
+useKC = input(true, "Use KC Filter", input.bool)
+useMF = input(true, "Use MF Filter", input.bool)
+
+// FILTER KELTNER CHANNEL //
+// {
+
+filtkCLength = 10
+filtkCMult = 0.5
+    
+[filtkCMiddle, filtkCUpper, filtkCLower] = f_kc(close, filtkCLength, filtkCMult, kCRange, kCRangeLen, kCRes)
+//}
+//Buffers ==> filtkCMiddle, filtkCUpper, filtkCLower
+
+//***** MONEY FLOW *****//
+// {
+mfLen = input(14, "Money FLow Length", input.integer, minval=1, maxval=2000, group="MONEY FLOW")
+mfOb = input(80, "MF Overbought", input.integer, group="MONEY FLOW")
+mfOs = input(20, "MF Oversold", input.integer, group="MONEY FLOW")
+src = hlc3
+upper = sum(volume * (change(src) <= 0 ? 0 : src), mfLen)
+lower = sum(volume * (change(src) >= 0 ? 0 : src), mfLen)
+_rsi(upper, lower) => 100.0 - (100.0 / (1.0 + upper / lower))
+mf = _rsi(upper, lower)
+isMfOb = mf >= mfOb
+isMfOs = mf <= mfOs
+//}
+// Signals ==> isMfOb, isMfOs
+
+//===== FILTER EXECUTION =====//
+// {
+
+filtLong = useKC and useMF ? (not znInZone(kCUpper, kCLower, high, low)) and low > kCMiddle and (crossover(mf, mfOs)) : 
+  useKC ? (not znInZone(kCUpper, kCLower, high, low)) and (crossover(mf, mfOs)) : 
+  (crossover(mf, mfOs))
+  
+filtShort = useKC and useMF ? (not znInZone(kCUpper, kCLower, high, low)) and kCMiddle > high and (crossunder(mf, mfOb)) : 
+  useKC ? (not znInZone(kCUpper, kCLower, high, low)) and (crossunder(mf, mfOb)) : 
+  (crossunder(mf, mfOb))
+
+//}
+
+//}
+
+//=============== STRATEGY EXECUTION ===============//
+// {
+
+//***** SCREENER *****//
+//{
+longCondition = (filtkCMiddle > kCMiddle) and (not znInZone(kCUpper, kCLower, filtkCUpper, filtkCLower))
+shortCondition = (filtkCMiddle < kCMiddle) and (not znInZone(kCUpper, kCLower, filtkCUpper, filtkCLower))
+
+barInEma(_x) => _x == 0 ? lineInZone(high, low, ema) : lineInZone(high[_x], low[_x], ema[_x])
+barAboveEma(_x) => _x == 0 ? low > ema : low[_x] > ema[_x]
+barBelowEma(_x) => _x == 0 ? high < ema : high[_x] < ema[_x]
+
+prevBarInEma = barInEma(1)
+prevBarAboveEma = (not prevBarInEma) and barAboveEma(1)
+prevBarBelowEma = (not prevBarInEma) and barBelowEma(1)
+
+barBreakAbove = useStrictBreak ? (crossover(close[1], ema[1])) and (barssince((not lineInZone(high, low, ema)) 
+  and barBelowEma(0)) < barssince(crossunder(close, ema))) : 
+  (crossover(close[1], ema[1]))
+
+barBreakBelow = useStrictBreak ? (crossunder(close[1], ema[1])) and (barssince((not lineInZone(high, low, ema)) 
+  and barAboveEma(0)) < barssince(crossover(close, ema))) : 
+  (crossunder(close[1], ema[1]))
+//}
+
+//***** TRIGGER *****//
+//{
+var entLongActive = false
+var entShortActive = false
+
+var entLongHigh = 0.0
+if (barBreakAbove)
+    entLongHigh := high[1]
+
+var entLongLow = 0.0
+if (barBreakAbove)
+    entLongLow := low[1]
+
+var entShortHigh = 0.0
+if (barBreakBelow)
+    entShortHigh := high[1]
+
+var entShortLow = 0.0
+if (barBreakBelow)
+    entShortLow := low[1]
+
+
+//*** Method 1 : ENTRY AT BREAKOUT ***//
+meth1Long = longCondition and (close > entLongHigh) and (close[1] < entLongHigh)
+meth1Short = shortCondition and (close < entShortLow) and (close[1] >= entShortLow)
+
+//*** Method 2 : REVERSE BREAKOUT ENTRY ***//
+meth2Long = longCondition and (close > entShortHigh) and (close[1] <= entShortHigh)
+meth2Short = shortCondition and (close < entLongLow) and (close[1] >= entLongLow)
+
+//*** Entries ***//
+entLong = useMeth == "Both" ? meth1Long or meth2Long :
+  useMeth == "Strategy 1" ? meth1Long : meth2Long
+  
+entShort = useMeth == "Both" ? meth1Short or meth2Short :
+  useMeth == "Strategy 1" ? meth1Short : meth2Short
+
+//}
+
+//*** FILTER APPLICATION ***//
+if (barssince(filtLong) < barssince(entLong))
+    entLongActive := true
+else 
+    entLongActive := false
+    
+if (barssince(filtShort) < barssince(entShort))
+    entShortActive := true
+else
+    entShortActive := false
+
+
+goLong = entLong and (barssince(entLongActive) <= 1)
+goShort = entShort and (barssince(entShortActive) <= 1)
+//}
+
+//=============== PLOTS ===============//
+// {
+plot(ema, "EMA", color.new(color.white, 70))
+plot(kCUpper,"kCUpper", color.new(color.gray, 0))
+plot(kCMiddle, "kCMiddle", color.new(color.orange, 70))
+plot(kCLower, "kCLower", color.new(color.gray, 0))
+
+plotshape(goLong, "Long", shape.triangleup, location.belowbar, color.yellow, size = size.small)
+plotshape(goShort, "Short", shape.triangledown, location.abovebar, color.fuchsia, size = size.small)
+
+// plotshape(useMeth == "Both" or useMeth == "Strategy 1" ? meth1Long : na, "Long Entry 1", 
+//   shape.triangleup, location.belowbar, color.lime, size = size.small, editable=false)
+  
+// plotshape(useMeth == "Both" or useMeth == "Strategy 1" ? meth1Short : na, "Short Entry 1", 
+//   shape.triangledown, location.abovebar, color.maroon, size = size.small, editable=false)
+
+// plotshape(useMeth == "Both" or useMeth == "Strategy 2" ? meth2Long : na, "Long Entry 2", 
+//   shape.triangleup, location.belowbar, color.olive, size = size.small, editable=false)
+  
+// plotshape(useMeth == "Both" or useMeth == "Strategy 2" ? meth2Short : na, "Short Entry 2", 
+//   shape.triangledown, location.abovebar, color.purple, size = size.small, editable=false)
+//}

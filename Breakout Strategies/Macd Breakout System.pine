@@ -65,25 +65,25 @@ hist    = htf(htfRes, macd - signal, 0)
 
 //}
 
-//*************** S/R ZONES ***************//
+//=============== FILTERS ===============//
 // {
 
-// FILTER FOR ZONE SELECTION
-// {
-useFilt = input(false, "Use Filter", group="FILTER")
+useFilt = input(true, "Use Filter", group="FILTER")
+useStFilt = input(false, "Use Stochastic Filter", input.bool)
+useMfFilt = input(true, "Use MF Filter", input.bool, group="FILTER")
 useMacdFilt = input(true, "Use Macd Zero Line Filter", input.bool, group="FILTER")
 
 //***** STOCHASTIC RSI *****//
 //{
 
 // INPUT
-stRsiRes = input("120", "Stoch RSI Timeframe", input.resolution, group="FILTER")
-smoothK = input(3, "K", minval=1, group="FILTER")
-smoothD = input(3, "D", minval=1, group="FILTER")
-lengthRSI = input(14, "RSI Length", minval=1, group="FILTER")
-lengthStoch = input(14, "Stochastic Length", minval=1, group="FILTER")
-filtOb = input(80, "RSI Overbought", group="FILTER")
-filtOs = input(20, "RSI Oversold", group="FILTER")
+stRsiRes = input("120", "Stoch RSI Timeframe", input.resolution, group="FILTER: STOCHASTIC")
+smoothK = input(3, "K", minval=1, group="FILTER: STOCHASTIC")
+smoothD = input(3, "D", minval=1, group="FILTER: STOCHASTIC")
+lengthRSI = input(14, "RSI Length", minval=1, group="FILTER: STOCHASTIC")
+lengthStoch = input(14, "Stochastic Length", minval=1, group="FILTER: STOCHASTIC")
+stOb = input(80, "RSI Overbought", group="FILTER: STOCHASTIC")
+stOs = input(20, "RSI Oversold", group="FILTER: STOCHASTIC")
 src = close
 
 //CALCULATIONS
@@ -91,14 +91,42 @@ rsi1 = htf(stRsiRes, rsi(src, lengthRSI), false)
 stoch = htf(stRsiRes, sma(stoch(rsi1, rsi1, rsi1, lengthStoch), smoothK), false)
 stSignal = htf(stRsiRes, sma(stoch, smoothD), false)
 
-isFiltOb = stoch >= filtOb
-isFiltOs = stoch <= filtOs
+isStOb = stoch >= stOb
+isStOs = stoch <= stOs
+
+//}
+
+//***** MONEY FLOW *****//
+// {
+mfLen = input(14, "Money FLow Length", input.integer, minval=1, maxval=2000, group="FILTER: MONEY FLOW")
+mfOb = input(80, "MF Overbought", input.integer, group="FILTER: MONEY FLOW")
+mfOs = input(20, "MF Oversold", input.integer, group="FILTER: MONEY FLOW")
+mfSrc = hlc3
+upper = sum(volume * (change(mfSrc) <= 0 ? 0 : mfSrc), mfLen)
+lower = sum(volume * (change(mfSrc) >= 0 ? 0 : mfSrc), mfLen)
+_rsi(upper, lower) => 100.0 - (100.0 / (1.0 + upper / lower))
+mf = _rsi(upper, lower)
+isMfOb = mf >= mfOb
+isMfOs = mf <= mfOs
+//}
+// Signals ==> isMfOb, isMfOs
+
+//===== FILTER EXECUTION =====//
+// {
+filtLong = useStFilt and useMfFilt ? crossover(mf, mfOs) and isStOb : 
+  useMfFilt ? crossover(mf, mfOs) :
+  useStFilt ? isStOb : na
+  
+filtShort = useStFilt and useMfFilt ? crossunder(mf, mfOb) and isStOs : 
+  useMfFilt ? crossunder(mf, mfOb) :
+  useStFilt ? isStOs : na
 
 //}
 
 //}
-/////////////////////////////////////////
 
+//*************** S/R ZONES ***************//
+// {
 // ZONES
 // {
 
@@ -109,10 +137,10 @@ histIncBelow = useMacdFilt ? htf(htfRes, rising(hist, 1), 0) and hist < 0 and ma
 histDecAbove = useMacdFilt ? htf(htfRes, falling(hist, 1), 0) and hist > 0 and macd > 0 : 
   htf(htfRes, falling(hist, 1), 0) and hist > 0
 
-startIncBelow = useFilt ? htf(htfRes, histIncBelow[1] == false and histIncBelow == true, 0) and isFiltOs : 
+startIncBelow = useFilt and useStFilt ? htf(htfRes, histIncBelow[1] == false and histIncBelow == true, 0) and isStOs : 
   htf(htfRes, histIncBelow[1] == false and histIncBelow == true, 0)
   
-startDecAbove = useFilt ? htf(htfRes, histDecAbove[1] == false and histDecAbove == true, 0) and isFiltOb : 
+startDecAbove = useFilt and useStFilt ? htf(htfRes, histDecAbove[1] == false and histDecAbove == true, 0) and isStOb : 
   htf(htfRes, histDecAbove[1] == false and histDecAbove == true, 0) 
 
 //To Mark out zone, mark the highs and the lows of the htf candles
@@ -257,6 +285,22 @@ priceRetouchShort = pendingShort and prevBarBelowShortZn and  currBarInShortZn
 
 //FOR STRATEGY
 
+//*** FILTER APPLICATION ***//
+var entLongActive = false
+var entShortActive = false
+
+if (barssince(filtLong) < barssince(priceRetouchLong))
+    entLongActive := true
+else 
+    entLongActive := false
+    
+if (barssince(filtShort) < barssince(priceRetouchShort))
+    entShortActive := true
+else
+    entShortActive := false
+
+goLong = priceRetouchLong and (barssince(entLongActive) <= 1)
+goShort = priceRetouchShort and (barssince(entShortActive) <= 1)
 
 //}
 
@@ -285,7 +329,7 @@ shortZnStop = plot(shortTop + slAtr, "Short Zone Stop", color.new(color.gray, 70
 fill(shortZnTop, shortZnBott, color.new(#e81c34, 75))
 fill(shortZnStop, shortZnTop, color.new(#e81c34, 90))
 
-plotshape(priceRetouchLong, "Long", shape.triangleup, location.belowbar, color.lime, size = size.small)
-plotshape(priceRetouchShort, "Short", shape.triangledown, location.abovebar, color.maroon, size = size.small)
+plotshape(goLong, "Long", shape.triangleup, location.belowbar, color.lime, size = size.small)
+plotshape(goShort, "Short", shape.triangledown, location.abovebar, color.maroon, size = size.small)
 
 //}

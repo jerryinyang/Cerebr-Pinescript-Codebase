@@ -21,14 +21,15 @@ lineInZone(_top, _bott, _line) => (_line <= _top and _line >= _bott )
 
 // {
 useStrictBreak = input(true, "Use Strick Breakout Rule", input.bool)
+useMeth  = input("Strategy 1", "Choose Strategy", options=["Both" ,"Strategy 1", "Strategy 2"])
 //}
 
 //=============== INDICATORS ===============//
-//{
+// {
 //***** EMA *****//
 // {
 emaRes = input("", "EMA Timeframe", input.resolution, group="EMA")
-emaLen = input(20, "EMA Length", input.integer, minval=1, group="EMA")
+emaLen = input(30, "EMA Length", input.integer, minval=1, group="EMA")
 
 ema = emaRes == "" ? ema(close, emaLen) : htf(emaRes, ema(close, emaLen), false)
 
@@ -76,13 +77,12 @@ filtkCMult = 0.5
 //}
 
 //=============== STRATEGY EXECUTION ===============//
+// {
+
+//***** SCREENER *****//
 //{
-
-// SCREENER
 longCondition = (filtkCMiddle > kCMiddle) and (not znInZone(kCUpper, kCLower, filtkCUpper, filtkCLower))
-ShortCondition = (filtkCMiddle < kCMiddle) and (not znInZone(kCUpper, kCLower, filtkCUpper, filtkCLower))
-
-// TRIGGER
+shortCondition = (filtkCMiddle < kCMiddle) and (not znInZone(kCUpper, kCLower, filtkCUpper, filtkCLower))
 
 barInEma(_x) => _x == 0 ? lineInZone(high, low, ema) : lineInZone(high[_x], low[_x], ema[_x])
 barAboveEma(_x) => _x == 0 ? low > ema : low[_x] > ema[_x]
@@ -99,8 +99,63 @@ barBreakAbove = useStrictBreak ? (crossover(close[1], ema[1])) and (barssince((n
 barBreakBelow = useStrictBreak ? (crossunder(close[1], ema[1])) and (barssince((not lineInZone(high, low, ema)) 
   and barAboveEma(0)) < barssince(crossover(close, ema))) : 
   (crossunder(close[1], ema[1]))
+//}
+
+//***** TRIGGER *****//
+//{
+
+var entLongHigh = 0.0
+if (barBreakAbove)
+    entLongHigh := high[1]
+
+var entLongLow = 0.0
+if (barBreakAbove)
+    entLongLow := low[1]
+
+var entShortHigh = 0.0
+if (barBreakBelow)
+    entShortHigh := high[1]
+
+var entShortLow = 0.0
+if (barBreakBelow)
+    entShortLow := low[1]
+
+//*** Method 1 : ENTRY AT BREAKOUT***//
+meth1Long = longCondition and (close > entLongHigh) and (close[1] < entLongHigh)
+meth1Short = shortCondition and (close < entShortLow) and (close[1] >= entShortLow)
+
+//*** Method 2 : REVERSE BREAKOUT ENTRY ***//
+meth2Long = longCondition and (close > entShortHigh) and (close[1] <= entShortHigh)
+meth2Short = shortCondition and (close < entLongLow) and (close[1] >= entLongLow)
+
+//*** Entries ***//
+goLong = useMeth == "Both" ? meth1Long or meth2Long :
+  useMeth == "Strategy 1" ? meth1Long : meth2Long
+  
+goShort = useMeth == "Both" ? meth1Short or meth2Short :
+  useMeth == "Strategy 1" ? meth1Short : meth2Short
 
 //}
-plot(na)
-plotshape(barBreakAbove, "Long", shape.triangleup, location.belowbar, color.lime, size = size.small)
-plotshape(barBreakBelow, "Short", shape.triangledown, location.abovebar, color.maroon, size = size.small)
+
+
+//}
+
+//=============== PLOTS ===============//
+// {
+plot(ema, "EMA", color.new(color.white, 70))
+plot(kCUpper,"kCUpper", color.new(color.gray, 0))
+plot(kCMiddle, "kCMiddle", color.new(color.yellow, 70))
+plot(kCLower, "kCLower", color.new(color.gray, 0))
+
+plotshape(useMeth == "Both" or useMeth == "Strategy 1" ? meth1Long : na, "Long Entry 1", 
+  shape.triangleup, location.belowbar, color.lime, size = size.small, editable=false)
+  
+plotshape(useMeth == "Both" or useMeth == "Strategy 1" ? meth1Short : na, "Short Entry 1", 
+  shape.triangledown, location.abovebar, color.maroon, size = size.small, editable=false)
+
+plotshape(useMeth == "Both" or useMeth == "Strategy 2" ? meth2Long : na, "Long Entry 2", 
+  shape.triangleup, location.belowbar, color.olive, size = size.small, editable=false)
+  
+plotshape(useMeth == "Both" or useMeth == "Strategy 2" ? meth2Short : na, "Short Entry 2", 
+  shape.triangledown, location.abovebar, color.purple, size = size.small, editable=false)
+// }
