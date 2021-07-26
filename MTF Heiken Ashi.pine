@@ -1,0 +1,65 @@
+
+//@version=4
+study("MTF Heiken Ashi")
+
+htf(_res, _exp, gaps_on)  => gaps_on == 0 ? security(syminfo.tickerid, _res, _exp) :
+  gaps_on == true ? security(syminfo.tickerid, _res, _exp, barmerge.gaps_on, barmerge.lookahead_off ) : 
+  security(syminfo.tickerid, _res, _exp, barmerge.gaps_off, barmerge.lookahead_off )
+
+usePrev = input(true, "Use Previous Candle")
+useMeth = input("Calculate", "Heiken Ashi Method", options=["Calculate", "Import Data"])
+useWickFilt = input(true, "Use Wick Filter", input.bool)
+wickMargin = input(10, "Wick Length Margin (Percent)", input.float)
+
+haRes1 = input("60", "Timeframe 1", input.resolution)
+haRes2 = input("120", "Timeframe 2", input.resolution) 
+haRes3 = input("240", "Timeframe 3", input.resolution)
+
+haDir(_res) =>
+    ha_open = usePrev ? htf(_res, open[1], 0) : htf(_res, open, 0)
+    ha_close = usePrev ? htf(_res, close[1], 0) : htf(_res, close, 0)
+    ha_dif = ha_open - ha_close
+    ha_diff = iff(ha_dif > 0, 1, iff(ha_dif<0, 2, 3))
+
+    ha_diff
+    
+    
+haLong(_x) => _x == 2
+haShort(_x) => _x == 1
+
+
+haDir2(_res) => 
+
+    highh = usePrev ? high[1] : high
+    loww = usePrev ? low[1] : low
+    closee = usePrev ? close[1] : close
+    openn = usePrev ? open[1] : open
+    
+      
+    ha_dif = usePrev ? security(heikinashi(syminfo.tickerid), _res, open[1] - close[1]) : 
+      security(heikinashi(syminfo.tickerid), _res, open - close)
+      
+    ha_diff = iff(ha_dif > 0, 1, iff(ha_dif<0, 2, 3))
+    
+    haHighPerc = ha_diff != 3 ? security(heikinashi(syminfo.tickerid), _res, (abs(highh - max(closee, openn)) / abs(ha_dif))) * 100 : na
+    haLowPerc = ha_diff != 3 ? security(heikinashi(syminfo.tickerid), _res, (abs(loww - min(closee, openn)) / abs(ha_dif))) * 100 : na
+    
+    smallWick = ha_diff == 2 ? haLowPerc <= wickMargin : ha_diff == 1 ? haHighPerc <= wickMargin : na
+    
+    haDirr = useWickFilt ? (ha_diff == 2 and smallWick ? "Long" : ha_diff == 1 and smallWick ? "Short" : "Neutral" ) : 
+      (ha_diff == 2 ? "Long" : ha_diff == 1 ? "Short" : "Neutral" )
+      
+    haDirr
+
+
+ha1Long = useMeth == "Calculate" ? haLong(haDir(haRes1)) : haDir2(haRes1) == "Long"
+ha2Long = useMeth == "Calculate" ? haLong(haDir(haRes2)) : haDir2(haRes2) == "Long"
+ha3Long = useMeth == "Calculate" ? haLong(haDir(haRes3)) : haDir2(haRes3) == "Long"
+
+ha1Short = useMeth == "Calculate" ? haShort(haDir(haRes1)) : haDir2(haRes1) == "Short"
+ha2Short = useMeth == "Calculate" ? haShort(haDir(haRes2)) : haDir2(haRes2) == "Short"
+ha3Short = useMeth == "Calculate" ? haShort(haDir(haRes3)) : haDir2(haRes3) == "Short"
+
+plot(30, "HA Timeframe 1", ha1Long ? color.green : ha1Short ? color.red : color.white, 3, plot.style_circles)
+plot(0, "HA Timeframe 2", ha2Long ? color.green : ha2Short ? color.red : color.white, 3, plot.style_circles)
+plot(-30, "HA Timeframe 3", ha3Long ? color.green : ha3Short ? color.red : color.white, 3, plot.style_circles)

@@ -161,37 +161,37 @@ slAtr = atr(slAtrLen) * slAtrMult
 // DETECTING ENTRY TRIGGER FOR LONGS 
 // {
 prevBar2InLongZn = barInZone(longTop, longBott, 2)
-prevBar2AboveLongZn = (not prevBar2InLongZn) and low[2] > longTop
-prevBar2BelowLongZn = (not prevBar2InLongZn) and high[2] < longBott
+prevBar2AboveLongZn = (not prevBar2InLongZn) and low[2] > longTop[1]
+prevBar2BelowLongZn = (not prevBar2InLongZn) and high[2] < longBott[1]
 
 prevBarInLongZn = barInZone(longTop, longBott, 1)
-prevBarAboveLongZn = (not prevBarInLongZn) and low[1] > longTop
-prevBarBelowLongZn = (not prevBarInLongZn) and high[1] < longBott
+prevBarAboveLongZn = (not prevBarInLongZn) and low[1] > longTop[1]
+prevBarBelowLongZn = (not prevBarInLongZn) and high[1] < longBott[1]
 
 
 // Find the first bar to leave the zone, after the new zone forms
 barLeavesLongZn = prevBar2InLongZn and (not prevBarInLongZn)
 
-longEntryValid = barLeavesLongZn and low[1] > longTop
-longEntryInvalid = barLeavesLongZn and high[1] < longBott
+longEntryValid = barLeavesLongZn and low[1] > longTop[1]
+longEntryInvalid = barLeavesLongZn and high[1] < longBott[1]
 //}
 
 // DETECTING ENTRY TRIGGER FOR SHORTS 
 // {
 prevBar2InShortZn = barInZone(shortTop, shortBott, 2)
-prevBar2AboveShortZn = (not prevBar2InShortZn) and low[2] > shortTop
-prevBar2BelowShortZn = (not prevBar2InShortZn) and high[2] < shortBott
+prevBar2AboveShortZn = (not prevBar2InShortZn) and low[2] > shortTop[2]
+prevBar2BelowShortZn = (not prevBar2InShortZn) and high[2] < shortBott[2]
 
 prevBarInShortZn = barInZone(shortTop, shortBott, 1)
-prevBarAboveShortZn = (not prevBarInShortZn) and low[1] > shortTop
-prevBarBelowShortZn = (not prevBarInShortZn) and high[1] < shortBott
+prevBarAboveShortZn = (not prevBarInShortZn) and low[1] > shortTop[1]
+prevBarBelowShortZn = (not prevBarInShortZn) and high[1] < shortBott[1]
 
 
 // Find the first bar to leave the zone, after the new zone forms
 barLeavesShortZn = prevBar2InShortZn and (not prevBarInShortZn)
 
-shortEntryValid = barLeavesShortZn and high[1] < shortBott
-shortEntryInvalid = barLeavesShortZn and low[1] > shortTop
+shortEntryValid = barLeavesShortZn and high[1] < shortBott[1]
+shortEntryInvalid = barLeavesShortZn and low[1] > shortTop[1]
 //}
 
 //}

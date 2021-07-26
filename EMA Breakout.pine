@@ -1,0 +1,106 @@
+
+//@version=4
+study("EMA BREAKOUT", overlay=1)
+
+//=============== GENERAL FUNCTIONS ===============//
+// {
+htf(_res, _exp, gaps_on)  => gaps_on == 0 ? security(syminfo.tickerid, _res, _exp) :
+  gaps_on == true ? security(syminfo.tickerid, _res, _exp, barmerge.gaps_on, barmerge.lookahead_off ) : 
+  security(syminfo.tickerid, _res, _exp, barmerge.gaps_off, barmerge.lookahead_off )
+  
+barInZone(_top, _bott, _index) => _index == 0 ? (high <= _top and high >= _bott ) or 
+  ( low <= _top and low >= _bott) or (high >= _top and low <= _bott) : 
+  (high[_index] <= _top and high[_index] >= _bott ) or 
+  ( low[_index] <= _top and low[_index] >= _bott) or (high[_index] >= _top and low[_index] <= _bott)
+  
+znInZone(_top, _bott, _top2, _bott2) => (_top2 <= _top and _top2 >= _bott ) or ( _bott2 <= _top and _bott2 >= _bott) or (_top2 >= _top and _bott2 <= _bott)
+
+lineInZone(_top, _bott, _line) => (_line <= _top and _line >= _bott )
+
+// }
+
+// {
+useStrictBreak = input(true, "Use Strick Breakout Rule", input.bool)
+//}
+
+//=============== INDICATORS ===============//
+//{
+//***** EMA *****//
+// {
+emaRes = input("", "EMA Timeframe", input.resolution, group="EMA")
+emaLen = input(20, "EMA Length", input.integer, minval=1, group="EMA")
+
+ema = emaRes == "" ? ema(close, emaLen) : htf(emaRes, ema(close, emaLen), false)
+
+// }
+// Signals ==> ema
+
+//***** KELTNER CHANNEL *****//
+// {
+kCRes = input("15", "HTF Timeframe", input.resolution, group="KELTNER CHANNEL")
+kCSrc = close
+kCLength = input(100, "KC Length", input.integer, group="KELTNER CHANNEL")
+kCMult = input(0.25, "HTF Multiplier", input.float, step=0.05, minval=0.05, group="KELTNER CHANNEL")
+kCRange = input("ATR", "Range Style", options=["ATR", "True Range", "Bar Width"], group="KELTNER CHANNEL")
+kCRangeLen = input(14, "Range Period", group="KELTNER CHANNEL")
+
+f_kc(src, length, mult, kcRange, rangeLen, res) =>
+    float basis = security(syminfo.tickerid, res, ema(src, length), barmerge.gaps_off, barmerge.lookahead_off)
+    float span = kcRange == "ATR" ? security(syminfo.tickerid, res, atr(rangeLen), barmerge.gaps_off, barmerge.lookahead_off) : 
+      kcRange == "True Range" ? security(syminfo.tickerid, res, tr, barmerge.gaps_off, barmerge.lookahead_off) : 
+      kcRange == "Bar Width" ? security(syminfo.tickerid, res, (high - low), barmerge.gaps_off, barmerge.lookahead_off) : na
+      
+    float rangeEma = ema(span, length)
+    
+    security(syminfo.tickerid, res, (high - low), barmerge.gaps_off, barmerge.lookahead_off)
+    
+    upperKC = basis + (rangeEma * mult)
+    middleKC = basis
+    lowerKC = basis - (rangeEma * mult)
+    
+    [middleKC, upperKC, lowerKC]
+    
+    
+[kCMiddle, kCUpper, kCLower] = f_kc(kCSrc, kCLength, kCMult, kCRange, kCRangeLen, kCRes)
+//}
+//Buffers ==> kCMiddle, kCUpper, kCLower
+
+// FILTER KELTNER CHANNEL //
+// {
+filtkCLength = 10
+filtkCMult = 0.5
+    
+[filtkCMiddle, filtkCUpper, filtkCLower] = f_kc(close, filtkCLength, filtkCMult, kCRange, kCRangeLen, kCRes)
+//}
+//Buffers ==> filtkCMiddle, filtkCUpper, filtkCLower
+//}
+
+//=============== STRATEGY EXECUTION ===============//
+//{
+
+// SCREENER
+longCondition = (filtkCMiddle > kCMiddle) and (not znInZone(kCUpper, kCLower, filtkCUpper, filtkCLower))
+ShortCondition = (filtkCMiddle < kCMiddle) and (not znInZone(kCUpper, kCLower, filtkCUpper, filtkCLower))
+
+// TRIGGER
+
+barInEma(_x) => _x == 0 ? lineInZone(high, low, ema) : lineInZone(high[_x], low[_x], ema[_x])
+barAboveEma(_x) => _x == 0 ? low > ema : low[_x] > ema[_x]
+barBelowEma(_x) => _x == 0 ? high < ema : high[_x] < ema[_x]
+
+prevBarInEma = barInEma(1)
+prevBarAboveEma = (not prevBarInEma) and barAboveEma(1)
+prevBarBelowEma = (not prevBarInEma) and barBelowEma(1)
+
+barBreakAbove = useStrictBreak ? (crossover(close[1], ema[1])) and (barssince((not lineInZone(high, low, ema)) 
+  and barBelowEma(0)) < barssince(crossunder(close, ema))) : 
+  (crossover(close[1], ema[1]))
+
+barBreakBelow = useStrictBreak ? (crossunder(close[1], ema[1])) and (barssince((not lineInZone(high, low, ema)) 
+  and barAboveEma(0)) < barssince(crossover(close, ema))) : 
+  (crossunder(close[1], ema[1]))
+
+//}
+plot(na)
+plotshape(barBreakAbove, "Long", shape.triangleup, location.belowbar, color.lime, size = size.small)
+plotshape(barBreakBelow, "Short", shape.triangledown, location.abovebar, color.maroon, size = size.small)
