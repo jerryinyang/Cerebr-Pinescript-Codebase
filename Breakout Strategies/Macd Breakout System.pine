@@ -17,6 +17,16 @@ barInZone(_top, _bott, _index) => _index == 0 ? (high <= _top and high >= _bott 
 znInZone(_top, _bott, _top2, _bott2) => (_top2 <= _top and _top2 >= _bott ) or ( _bott2 <= _top and _bott2 >= _bott) or (_top2 >= _top and _bott2 <= _bott)
 
 lineInZone(_top, _bott, _line) => (_line <= _top and _line >= _bott )
+
+barInTradeZone(_top, _bott, _index) => _index == 0 ? (high < _top and high > _bott ) and ( low < _top and low > _bott)  :
+  (high[_index] < _top and high[_index] > _bott ) and ( low[_index] < _top and low[_index] > _bott)
+
+sltotp(_ent, _sl, _rrr) => 
+    slDist = abs(_ent - _sl)
+    tpDist = (slDist * _rrr)
+    tp = _ent > _sl ? _ent + tpDist : _ent - tpDist
+    
+    tp
 //}
 
 // INPUTS 
@@ -30,7 +40,7 @@ htfRes = input("120", " MACD TimeFrame", input.resolution, group="MACD SETTINGS"
 macdflen = input(8, "MACD Fast MA", input.integer, group="MACD SETTINGS")
 macdslen = input(17, "macd Slow MA", input.integer, group="MACD SETTINGS")
 siglen = input(9, "MACD signal Line", input.integer, group="MACD SETTINGS")
-gaps = input(true, "Gaps")
+gaps = true
 //}
 
 // FUNCTIONS
@@ -68,10 +78,13 @@ hist    = htf(htfRes, macd - signal, 0)
 //=============== FILTERS ===============//
 // {
 
+// INPUT
+// {
 useFilt = input(true, "Use Filter", group="FILTER")
-useStFilt = input(false, "Use Stochastic Filter", input.bool)
+useStFilt = input(false, "Use Stochastic Filter", input.bool, group="FILTER")
 useMfFilt = input(true, "Use MF Filter", input.bool, group="FILTER")
 useMacdFilt = input(true, "Use Macd Zero Line Filter", input.bool, group="FILTER")
+//}
 
 //***** STOCHASTIC RSI *****//
 //{
@@ -106,28 +119,22 @@ upper = sum(volume * (change(mfSrc) <= 0 ? 0 : mfSrc), mfLen)
 lower = sum(volume * (change(mfSrc) >= 0 ? 0 : mfSrc), mfLen)
 _rsi(upper, lower) => 100.0 - (100.0 / (1.0 + upper / lower))
 mf = _rsi(upper, lower)
-isMfOb = mf >= mfOb
-isMfOs = mf <= mfOs
 //}
-// Signals ==> isMfOb, isMfOs
+// Signals ==> mf
 
 //===== FILTER EXECUTION =====//
 // {
-filtLong = useStFilt and useMfFilt ? crossover(mf, mfOs) and isStOb : 
-  useMfFilt ? crossover(mf, mfOs) :
-  useStFilt ? isStOb : na
+filtLong =
+  useMfFilt ? crossover(mf, mfOs) : na
   
-filtShort = useStFilt and useMfFilt ? crossunder(mf, mfOb) and isStOs : 
-  useMfFilt ? crossunder(mf, mfOb) :
-  useStFilt ? isStOs : na
+filtShort =
+  useMfFilt ? crossunder(mf, mfOb) : na
 
 //}
 
 //}
 
 //*************** S/R ZONES ***************//
-// {
-// ZONES
 // {
 
 //MACD HIST PIVOT POINT
@@ -143,6 +150,7 @@ startIncBelow = useFilt and useStFilt ? htf(htfRes, histIncBelow[1] == false and
 startDecAbove = useFilt and useStFilt ? htf(htfRes, histDecAbove[1] == false and histDecAbove == true, 0) and isStOb : 
   htf(htfRes, histDecAbove[1] == false and histDecAbove == true, 0) 
 
+/////////////////////////////////////////
 //To Mark out zone, mark the highs and the lows of the htf candles
 htfbarHigh = htf(htfRes, high, 0)
 htfbarLow = htf(htfRes, low, 0)
@@ -166,8 +174,6 @@ var shortBott = 0.0
 if (startDecAbove)
     shortTop := shortZnHigh
     shortBott := shortZnLow
-
-//}
 
 //}
 
@@ -273,13 +279,14 @@ if shortEntryValid
 /////////////////////////////////////////
 
 // EXECUTIONS
+// {
 
 // FOR STUDY
 currBarInLongZn = barInZone(longTop, longBott, 0)
 currBarInShortZn = barInZone(shortTop, shortBott, 0)
 
-priceRetouchLong = pendingLong and prevBarAboveLongZn and  currBarInLongZn
-priceRetouchShort = pendingShort and prevBarBelowShortZn and  currBarInShortZn
+priceRetouchLong = pendingLong and prevBarAboveLongZn and currBarInLongZn
+priceRetouchShort = pendingShort and prevBarBelowShortZn and currBarInShortZn
 
 /////////////////////////////////////////
 
@@ -299,17 +306,121 @@ if (barssince(filtShort) < barssince(priceRetouchShort))
 else
     entShortActive := false
 
-goLong = priceRetouchLong and (barssince(entLongActive) <= 1)
-goShort = priceRetouchShort and (barssince(entShortActive) <= 1)
+goLong = useFilt ? priceRetouchLong and (barssince(entLongActive) <= 1) : priceRetouchLong
+goShort = useFilt ? priceRetouchShort and (barssince(entShortActive) <= 1) : priceRetouchShort
+
+var entryID = 0
+
+if goLong or goShort
+    entryID := entryID + 1
+
+//}
 
 //}
 
 //*************** RISK MANAGEMENT ***************//
-//{
+// {
+
+// INPUTS
+// {
 slAtrLen = input(14, "SL ATR Length", input.integer, minval=1, group="RISK MANAGEMENT")
 slAtrMult = input(1, "Multiplier", input.float, minval=0.01, step=0.25, group="RISK MANAGEMENT")
+tpRRR = input(1.5, "Reward-Risk Ratio", input.float, minval=0.01, step=0.25, group="RISK MANAGEMENT")
+//}
 
+//CONDITIONS
+// {
 slAtr = atr(slAtrLen) * slAtrMult
+
+var slLong = float(na)
+var slShort = float(na)
+var tpLong = float(na)
+var tpShort = float(na)
+
+if goLong
+    slLong := longBott - slAtr
+    tpLong := sltotp(longTop, slLong, tpRRR)
+
+if goShort
+    slShort := shortTop + slAtr
+    tpShort  := sltotp(shortBott, slShort, tpRRR)
+//}
+
+//}
+
+//*************** POSITION REVERSAL ALGORITHM ***************//
+// {
+
+// INPUTS
+// {
+useRev = input(false, "Take Reverse Entries?", input.bool, group="REVERSE POSITIONS")
+revRRR = input(1, "Reward-Risk Ratio For Reverse Positions", input.float, minval=0.01, step=0.25, group="REVERSE POSITIONS")
+useRevAtr = input(true, "Add ATR Buffer for Reverse Positions?", input.bool, group="REVERSE POSITIONS")
+//}
+
+// CONDITIONS
+// {
+
+posLongClosed = barInTradeZone(tpLong, slLong, 1) and (not barInTradeZone(tpLong, slLong, 0)) 
+pCLongGain = posLongClosed and (high >= tpLong)
+pCLongLoss = posLongClosed and (low <= slLong)
+
+posShortClosed = barInTradeZone(slShort, tpShort, 1) and (not barInTradeZone(tpShort, slShort, 0))
+pCShortGain = posShortClosed and (low <= tpShort)
+pCShortLoss = posShortClosed and (high >= slShort)
+//}
+
+//EXECUTION
+//{
+var revSlLong = float(na)
+var revSlShort = float(na)
+var revTpLong = float(na)
+var revTpShort = float(na)
+var revLongPending = false 
+var revShortPending = false
+
+if pCShortLoss
+    revSlLong := useRevAtr ? shortBott - slAtr : shortBott
+    revTpLong := sltotp(slShort, revSlLong, revRRR)
+    revLongPending := true
+
+if pCLongLoss
+    revSlShort := useRevAtr ? longTop + slAtr : longTop
+    revTpShort := sltotp(slLong, revSlShort, revRRR)
+    revShortPending := true
+    
+posLongActive = barssince(goLong) < barssince(posLongClosed)
+posShortActive = barssince(goShort) < barssince(posShortClosed)
+
+var revforEntryID = -1
+
+revGoLong = entryID != revforEntryID ? revLongPending and pCShortLoss and (close > slShort) : na
+revGoShort = entryID != revforEntryID ? revShortPending and pCLongLoss and (close < slLong) : na
+//}
+
+//}
+
+//*************** VARIABLE RESET ALGORITHM ***************//
+//{
+
+// BLOCKS MORE THAN ONE REVERSE ENTRIES
+if revGoLong
+    revLongPending := false
+if revGoShort
+    revShortPending := false
+    
+// RESETS REVERSE ENTRIES WHEN NEW ENTRIES ARE FOUND
+if goLong 
+    revShortPending := false
+if goShort
+    revLongPending := false
+
+// ONE REVERSE ENTRY PER TRADE
+if revGoLong
+    revforEntryID := entryID
+if revGoShort
+    revforEntryID := entryID
+
 //}
 
 // PLOTS
@@ -331,5 +442,8 @@ fill(shortZnStop, shortZnTop, color.new(#e81c34, 90))
 
 plotshape(goLong, "Long", shape.triangleup, location.belowbar, color.lime, size = size.small)
 plotshape(goShort, "Short", shape.triangledown, location.abovebar, color.maroon, size = size.small)
+
+plotshape(useRev ? revGoLong : na, "Reverse Long", shape.triangleup, location.belowbar, color.white, size = size.small, text="Rev Long")
+plotshape(useRev ? revGoShort : na, "Reverse Short", shape.triangledown, location.abovebar, color.white, size = size.small, text="Rev Short")
 
 //}
