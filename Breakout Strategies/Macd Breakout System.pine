@@ -31,7 +31,7 @@ sltotp(_ent, _sl, _rrr) =>
 
 // INPUTS 
 
-//*************** MACD ***************//
+//=============== MACD ===============//
 // {
 
 /// INPUTS
@@ -40,6 +40,7 @@ htfRes = input("120", " MACD TimeFrame", input.resolution, group="MACD SETTINGS"
 macdflen = input(8, "MACD Fast MA", input.integer, group="MACD SETTINGS")
 macdslen = input(17, "macd Slow MA", input.integer, group="MACD SETTINGS")
 siglen = input(9, "MACD signal Line", input.integer, group="MACD SETTINGS")
+maType = input("EMA", "MACD Moving Average Type", options=["EMA", "SMA"], group="MACD SETTINGS")
 gaps = true
 //}
 
@@ -47,18 +48,18 @@ gaps = true
 // {
 _macd() =>
     macdSrc     = close
-    FastMa = ema(macdSrc, macdflen)
-    SlowMa = ema(macdSrc, macdslen)
+    FastMa = maType == "EMA" ? ema(macdSrc, macdflen) : sma(macdSrc, macdflen)
+    SlowMa = maType == "EMA" ? ema(macdSrc, macdslen) : sma(macdSrc, macdslen)
     macd    = FastMa - SlowMa
     macd
     
 _signal() =>
 
     macdSrc     = close
-    FastMa = ema(macdSrc, macdflen)
-    SlowMa = ema(macdSrc, macdslen)
+    FastMa = maType == "EMA" ? ema(macdSrc, macdflen) : sma(macdSrc, macdflen)
+    SlowMa = maType == "EMA" ? ema(macdSrc, macdslen) : sma(macdSrc, macdslen)
     macd    = FastMa - SlowMa
-    signal  = ema(macd, siglen)
+    signal  = maType == "EMA" ? ema(macd, siglen) : sma(macd, siglen)
     signal 
 
 //}
@@ -72,7 +73,6 @@ signal = htf(htfRes, _signal(), gaps)
 hist    = htf(htfRes, macd - signal, 0)
 //}
 
-
 //}
 
 //=============== FILTERS ===============//
@@ -81,37 +81,13 @@ hist    = htf(htfRes, macd - signal, 0)
 // INPUT
 // {
 useFilt = input(true, "Use Filter", group="FILTER")
-useStFilt = input(false, "Use Stochastic Filter", input.bool, group="FILTER")
-useMfFilt = input(true, "Use MF Filter", input.bool, group="FILTER")
+//useMfFilt = input(true, "Use MF Filter", input.bool, group="FILTER")
 useMacdFilt = input(true, "Use Macd Zero Line Filter", input.bool, group="FILTER")
-//}
-
-//***** STOCHASTIC RSI *****//
-//{
-
-// INPUT
-stRsiRes = input("120", "Stoch RSI Timeframe", input.resolution, group="FILTER: STOCHASTIC")
-smoothK = input(3, "K", minval=1, group="FILTER: STOCHASTIC")
-smoothD = input(3, "D", minval=1, group="FILTER: STOCHASTIC")
-lengthRSI = input(14, "RSI Length", minval=1, group="FILTER: STOCHASTIC")
-lengthStoch = input(14, "Stochastic Length", minval=1, group="FILTER: STOCHASTIC")
-stOb = input(80, "RSI Overbought", group="FILTER: STOCHASTIC")
-stOs = input(20, "RSI Oversold", group="FILTER: STOCHASTIC")
-src = close
-
-//CALCULATIONS
-rsi1 = htf(stRsiRes, rsi(src, lengthRSI), false)
-stoch = htf(stRsiRes, sma(stoch(rsi1, rsi1, rsi1, lengthStoch), smoothK), false)
-stSignal = htf(stRsiRes, sma(stoch, smoothD), false)
-
-isStOb = stoch >= stOb
-isStOs = stoch <= stOs
-
 //}
 
 //***** MONEY FLOW *****//
 // {
-mfLen = input(14, "Money FLow Length", input.integer, minval=1, maxval=2000, group="FILTER: MONEY FLOW")
+mfLen = 14 //input(14, "Money FLow Length", input.integer, minval=1, maxval=2000, group="FILTER: MONEY FLOW")
 mfOb = input(80, "MF Overbought", input.integer, group="FILTER: MONEY FLOW")
 mfOs = input(20, "MF Oversold", input.integer, group="FILTER: MONEY FLOW")
 mfSrc = hlc3
@@ -125,10 +101,10 @@ mf = _rsi(upper, lower)
 //===== FILTER EXECUTION =====//
 // {
 filtLong =
-  useMfFilt ? crossover(mf, mfOs) : na
+  useFilt ? crossover(mf, mfOs) : 1
   
 filtShort =
-  useMfFilt ? crossunder(mf, mfOb) : na
+  useFilt ? crossunder(mf, mfOb) : 1
 
 //}
 
@@ -136,7 +112,6 @@ filtShort =
 
 //*************** S/R ZONES ***************//
 // {
-
 //MACD HIST PIVOT POINT
 histIncBelow = useMacdFilt ? htf(htfRes, rising(hist, 1), 0) and hist < 0 and macd < 0 : 
   htf(htfRes, rising(hist, 1), 0) and hist < 0 
@@ -144,13 +119,12 @@ histIncBelow = useMacdFilt ? htf(htfRes, rising(hist, 1), 0) and hist < 0 and ma
 histDecAbove = useMacdFilt ? htf(htfRes, falling(hist, 1), 0) and hist > 0 and macd > 0 : 
   htf(htfRes, falling(hist, 1), 0) and hist > 0
 
-startIncBelow = useFilt and useStFilt ? htf(htfRes, histIncBelow[1] == false and histIncBelow == true, 0) and isStOs : 
-  htf(htfRes, histIncBelow[1] == false and histIncBelow == true, 0)
+startIncBelow = htf(htfRes, histIncBelow[1] == false and histIncBelow == true, 0)
   
-startDecAbove = useFilt and useStFilt ? htf(htfRes, histDecAbove[1] == false and histDecAbove == true, 0) and isStOb : 
-  htf(htfRes, histDecAbove[1] == false and histDecAbove == true, 0) 
+startDecAbove = htf(htfRes, histDecAbove[1] == false and histDecAbove == true, 0) 
 
 /////////////////////////////////////////
+
 //To Mark out zone, mark the highs and the lows of the htf candles
 htfbarHigh = htf(htfRes, high, 0)
 htfbarLow = htf(htfRes, low, 0)
@@ -323,8 +297,8 @@ if goLong or goShort
 
 // INPUTS
 // {
-slAtrLen = input(14, "SL ATR Length", input.integer, minval=1, group="RISK MANAGEMENT")
-slAtrMult = input(1, "Multiplier", input.float, minval=0.01, step=0.25, group="RISK MANAGEMENT")
+slAtrLen = 14 //input(14, "SL ATR Length", input.integer, minval=1, group="RISK MANAGEMENT")
+slAtrMult = input(1, "ATR Multiplier", input.float, minval=0.01, step=0.25, group="RISK MANAGEMENT")
 tpRRR = input(1.5, "Reward-Risk Ratio", input.float, minval=0.01, step=0.25, group="RISK MANAGEMENT")
 //}
 
@@ -400,6 +374,72 @@ revGoShort = entryID != revforEntryID ? revShortPending and pCLongLoss and (clos
 
 //}
 
+//===============================================================================================================
+
+//*************** HTF TREND DIRECTION ALGORITHM ***************//
+//{
+
+// FIND OUT THE MOST RECENT SIGNAL AND ONLY ALLOW TRADES IN THAT DIRECTION
+// WE HAVE TO CALCULATE THE ENTRIE STRATEGY SCENARIO FOR THE HIGHER TIMEFRAME.
+
+//LTD (LONG-TERM TREND DIRECTION) MACD
+//{
+ltdRes = htfRes
+ltdHtfRes = input("240", "LTD MACD TimeFrame", input.resolution, group="LONG-TERM DIRECTION SETTINGS")
+
+ltdmacd   = htf(htfRes, _macd(), gaps)
+ltdsignal = htf(htfRes, _signal(), gaps)
+ltdhist    = htf(htfRes, macd - signal, 0)
+//}
+
+//LTD MONEY FLOW
+// {
+ltdupper = htf(ltdRes, sum(volume * (change(mfSrc) <= 0 ? 0 : mfSrc), mfLen), 0)
+ltdlower = htf(ltdRes, sum(volume * (change(mfSrc) >= 0 ? 0 : mfSrc), mfLen), 0)
+ltdmf = _rsi(ltdupper, ltdlower)
+//}
+// Signals ==> ltdmf
+
+//LTD MACD HIST PIVOT POINT
+//{
+ltdhistIncBelow = useMacdFilt ? htf(ltdHtfRes, rising(ltdhist, 1), 0) and ltdhist < 0 and ltdmacd < 0 : 
+  htf(ltdHtfRes, rising(ltdhist, 1), 0) and ltdhist < 0 
+  
+ltdhistDecAbove = useMacdFilt ? htf(ltdHtfRes, falling(ltdhist, 1), 0) and ltdhist > 0 and ltdmacd > 0 : 
+  htf(ltdHtfRes, falling(ltdhist, 1), 0) and ltdhist > 0
+
+ltdstartIncBelow = htf(ltdHtfRes, ltdhistIncBelow[1] == false and ltdhistIncBelow == true, 0)
+  
+ltdstartDecAbove = htf(ltdHtfRes, ltdhistDecAbove[1] == false and ltdhistDecAbove == true, 0) 
+
+//To Mark out zone, mark the highs and the lows of the htf candles
+ltdhtfbarHigh = htf(ltdHtfRes, high, 0)
+ltdhtfbarLow = htf(ltdHtfRes, low, 0)
+
+ltdlongZnHigh = ltdstartIncBelow ? ltdhtfbarHigh : na
+ltdlongZnLow = ltdstartIncBelow ? ltdhtfbarLow : na
+
+var ltdlongTop = 0.0
+var ltdlongBott = 0.0
+
+if (ltdstartIncBelow)
+    ltdlongTop := ltdlongZnHigh
+    ltdlongBott := ltdlongZnLow
+    
+ltdshortZnHigh = ltdstartDecAbove ? ltdhtfbarHigh : na
+ltdshortZnLow = ltdstartDecAbove ?  ltdhtfbarLow : na
+
+var ltdshortTop = 0.0
+var ltdshortBott = 0.0
+
+if (ltdstartDecAbove)
+    ltdshortTop := ltdshortZnHigh
+    ltdshortBott := ltdshortZnLow
+
+//}
+
+//}
+
 //*************** VARIABLE RESET ALGORITHM ***************//
 //{
 
@@ -414,6 +454,7 @@ if goLong
     revShortPending := false
 if goShort
     revLongPending := false
+
 
 // ONE REVERSE ENTRY PER TRADE
 if revGoLong
