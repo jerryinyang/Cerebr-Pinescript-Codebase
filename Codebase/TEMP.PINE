@@ -1,31 +1,7 @@
-// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
-// © madisons
+c2_wtnUpZone1 = isWithinZone(c2a1Middle, c2a1Upper)
+c2_wtnUpZone2 = isWithinZone(c2a1Upper, c2a2Upper)
+c2_wtnUpZone3 = isWithinZone(c2a3Upper, c2a3Upper)
 
-//@version=4
-study("MTF EMA Horizontal Lines", overlay=true)
-
-maLen = input(200, "MA Length", input.integer)
-maSrc = input(close, "MA Source", input.source)
-
-
-htf(_res, _exp, gaps_on)  => gaps_on == 0 ? security(syminfo.tickerid, _res, _exp) :
-  gaps_on == true ? security(syminfo.tickerid, _res, _exp, barmerge.gaps_on, barmerge.lookahead_off ) : 
-  security(syminfo.tickerid, _res, _exp, barmerge.gaps_off, barmerge.lookahead_off )
-
-ma = ema(maSrc, maLen)
-
-maM15 = htf("15", ma, false)
-maM30 = htf("30", ma, false)
-maH1 = htf("60", ma, false)
-maH4 = htf("240", ma, false)
-maD = htf("D", ma, false)
-maW = htf("W", ma, false)
-maM = htf("M", ma, false)
-
-var M15 = float(0)
-if (change(maM15))
-    M15 = maM15
-
-hline = hline(M15, title='15 Minutes', color=color.blue, linestyle=hline.style_dotted, linewidth=2)
-
-plot(na)
+c2_wtnDnZone1 = isWithinZone(c2a1Middle, c2a1Lower)
+c2_wtnDnZone2 = isWithinZone(c2a1Lower, c2a2Lower)
+c2_wtnDNZone3 = isWithinZone(c2a3Lower, c2a3Lower)

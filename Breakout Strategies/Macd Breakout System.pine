@@ -29,7 +29,7 @@ sltotp(_ent, _sl, _rrr) =>
     tp
 //}
 
-// INPUTS 
+// INDICATORS
 
 //=============== MACD ===============//
 // {
