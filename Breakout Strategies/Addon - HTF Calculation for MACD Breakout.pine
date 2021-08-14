@@ -1,0 +1,63 @@
+//*************** HTF TREND DIRECTION ALGORITHM ***************//
+//{
+
+// FIND OUT THE MOST RECENT SIGNAL AND ONLY ALLOW TRADES IN THAT DIRECTION
+// WE HAVE TO CALCULATE THE ENTRIE STRATEGY SCENARIO FOR THE HIGHER TIMEFRAME.
+
+//LTD (LONG-TERM TREND DIRECTION) MACD
+//{
+ltdRes = htfRes
+ltdHtfRes = input("240", "LTD MACD TimeFrame", input.resolution, group="LONG-TERM DIRECTION SETTINGS")
+
+ltdmacd   = htf(htfRes, _macd(), gaps)
+ltdsignal = htf(htfRes, _signal(), gaps)
+ltdhist    = htf(htfRes, macd - signal, 0)
+//}
+
+//LTD MONEY FLOW
+// {
+ltdupper = htf(ltdRes, sum(volume * (change(mfSrc) <= 0 ? 0 : mfSrc), mfLen), 0)
+ltdlower = htf(ltdRes, sum(volume * (change(mfSrc) >= 0 ? 0 : mfSrc), mfLen), 0)
+ltdmf = _rsi(ltdupper, ltdlower)
+//}
+// Signals ==> ltdmf
+
+//LTD MACD HIST PIVOT POINT
+//{
+ltdhistIncBelow = useMacdFilt ? htf(ltdHtfRes, rising(ltdhist, 1), 0) and ltdhist < 0 and ltdmacd < 0 : 
+  htf(ltdHtfRes, rising(ltdhist, 1), 0) and ltdhist < 0 
+  
+ltdhistDecAbove = useMacdFilt ? htf(ltdHtfRes, falling(ltdhist, 1), 0) and ltdhist > 0 and ltdmacd > 0 : 
+  htf(ltdHtfRes, falling(ltdhist, 1), 0) and ltdhist > 0
+
+ltdstartIncBelow = htf(ltdHtfRes, ltdhistIncBelow[1] == false and ltdhistIncBelow == true, 0)
+  
+ltdstartDecAbove = htf(ltdHtfRes, ltdhistDecAbove[1] == false and ltdhistDecAbove == true, 0) 
+
+//To Mark out zone, mark the highs and the lows of the htf candles
+ltdhtfbarHigh = htf(ltdHtfRes, high, 0)
+ltdhtfbarLow = htf(ltdHtfRes, low, 0)
+
+ltdlongZnHigh = ltdstartIncBelow ? ltdhtfbarHigh : na
+ltdlongZnLow = ltdstartIncBelow ? ltdhtfbarLow : na
+
+var ltdlongTop = 0.0
+var ltdlongBott = 0.0
+
+if (ltdstartIncBelow)
+    ltdlongTop := ltdlongZnHigh
+    ltdlongBott := ltdlongZnLow
+    
+ltdshortZnHigh = ltdstartDecAbove ? ltdhtfbarHigh : na
+ltdshortZnLow = ltdstartDecAbove ?  ltdhtfbarLow : na
+
+var ltdshortTop = 0.0
+var ltdshortBott = 0.0
+
+if (ltdstartDecAbove)
+    ltdshortTop := ltdshortZnHigh
+    ltdshortBott := ltdshortZnLow
+
+//}
+
+//}

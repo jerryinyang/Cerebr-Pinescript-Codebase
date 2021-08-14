@@ -126,7 +126,7 @@ drawChannel(OutOChan, chanlen, _y1_, _y2_, _dev, _slope) =>
             line.set_style(array.get(reglines12, x), style = line.style_dotted)
             line.set_extend(array.get(reglines12, x), extend = extend.none)
             
-            line.set_color(array.get(reglines13, x), color = color.blue)
+            line.set_color(array.get(reglines13, x), color = color.red)
             line.set_width(array.get(reglines13, x), width = 2)
             line.set_style(array.get(reglines13, x), style = line.style_dotted)
             line.set_extend(array.get(reglines13, x), extend = extend.none)
@@ -235,6 +235,30 @@ c2_wtnUpZone3 = isWithinZone(c2a2Upper, c2a3Upper)
 c2_wtnDnZone1 = isWithinZone(c2a1Middle, c2a1Lower)
 c2_wtnDnZone2 = isWithinZone(c2a1Lower, c2a2Lower)
 c2_wtnDnZone3 = isWithinZone(c2a2Lower, c2a3Lower)
+
+// }
+
+// }
+
+// DRAW CHANNEL DIRECTION LABELS
+// {
+
+drawLabel(chanLen, c_y1, c_slope) =>
+    var label sidelab = label.new(x = bar_index - (chanLen - 1), y = c_y1, text = "S",  size = size.large)
+    
+    txt = c_slope > 0 ? c_slope > c_slope[1] ? "⇑" : "⇗" : c_slope < 0 ? c_slope < c_slope[1] ? "⇓" : "⇘" : "⇒"
+    
+    stl = c_slope > 0 ? c_slope > c_slope[1] ? label.style_label_up : label.style_label_upper_right : c_slope < 0 ? c_slope < c_slope[1] ? label.style_label_down :  
+      label.style_label_lower_right : label.style_label_right
+      
+    label.set_style(sidelab, stl)
+    label.set_text(sidelab, txt)
+    label.set_x(sidelab, bar_index - (chanLen - 1))
+    label.set_y(sidelab, c_slope > 0 ? c_y1 - dev * devlen : c_slope < 0 ? c_y1 + dev * devlen : c_y1)
+    label.set_color(sidelab, c_slope > 0 ? upcol : c_slope < 0 ? dncol : color.blue)
+    
+drawLabel(chann1Len, y1_, slope)
+drawLabel(chann2Len, htfy1_, htfslope)
 
 // }
 
