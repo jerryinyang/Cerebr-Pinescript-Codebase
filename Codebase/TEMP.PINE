@@ -1,7 +1,713 @@
+
+//@version=4
+study("MACD Breakout", overlay=1)
+
+
+// GENERAL FUNCTIONS
+// {
+htf(_res, _exp, gaps_on)  => gaps_on == 0 ? security(syminfo.tickerid, _res, _exp) :
+  gaps_on == true ? security(syminfo.tickerid, _res, _exp, barmerge.gaps_on, barmerge.lookahead_off ) : 
+  security(syminfo.tickerid, _res, _exp, barmerge.gaps_off, barmerge.lookahead_off )
+  
+barInZone(_top, _bott, _index) => _index == 0 ? (high <= _top and high >= _bott ) or 
+  ( low <= _top and low >= _bott) or (high >= _top and low <= _bott) : 
+  (high[_index] <= _top and high[_index] >= _bott ) or 
+  ( low[_index] <= _top and low[_index] >= _bott) or (high[_index] >= _top and low[_index] <= _bott)
+  
+znInZone(_top, _bott, _top2, _bott2) => (_top2 <= _top and _top2 >= _bott ) or ( _bott2 <= _top and _bott2 >= _bott) or (_top2 >= _top and _bott2 <= _bott)
+
+lineInZone(_top, _bott, _line) => (_line <= _top and _line >= _bott )
+
+priceInZone(_top, _bott, _price) => (_price <= _top and _price >= _bott )
+
+barInTradeZone(_top, _bott, _index) => _index == 0 ? (high < _top and high > _bott ) and ( low < _top and low > _bott)  :
+  (high[_index] < _top and high[_index] > _bott ) and ( low[_index] < _top and low[_index] > _bott)
+
+sltotp(_ent, _sl, _rrr) => 
+    slDist = abs(_ent - _sl)
+    tpDist = (slDist * _rrr)
+    tp = _ent > _sl ? _ent + tpDist : _ent - tpDist
+    
+    tp
+  
+getCoord(ln) => 
+    x1 = line.get_x1(ln) 
+    y1 = line.get_y1(ln) 
+    x2 = line.get_x2(ln) 
+    y2 = line.get_y2(ln) 
+    
+    ln_slope = (y2 - y1) / (x2 - x1)
+    
+    [x1, y1, x2, y2, ln_slope]
+
+  
+//Period Converter Function
+//{
+resToInt(_res) =>
+    resInt = 0
+    if _res == "D"
+        resInt := 1440
+    else if _res == "W"
+        resInt := 10080
+    else if _res == "M"
+        resInt := 43200
+    else
+        resInt := round(tonumber(_res))
+    
+    resInt
+
+periodConv(_len, _res) =>
+    tf = round(tonumber(timeframe.period))
+    htfi = resToInt(_res)
+    
+    len = tf < htfi ? ((htfi * _len) / tf) : na
+    
+    len
+//}
+
+// }
+
+//*************** MACD ***************//
+// {
+
+/// INPUTS
+// {
+i_htfRes = input("120", " MACD TimeFrame", group="MACD SETTINGS", 
+  tooltip="120 = 2 Hours  || 240 = 4 Hours \n360 = 6 Hours  || 480 = 8 Hours \n720 = 12 Hours || " + 
+  "1440 = 1 Day \nFor Higher Timeframes, use the letter: \n" + "D, W, or M; with any multiplier")
+
+mset = input("8, 17", "Macd Settings", options=["8, 17", "13, 27", "15, 31", "20, 41"], group="MACD SETTINGS")
+siglen = input(9, "MACD signal Line", input.integer, group="MACD SETTINGS")
+maType = input("SMA", "MACD Moving Average Type", options=["EMA", "SMA"], group="MACD SETTINGS")
+
+histSens = input(5, "MACD Sensitivity", options=[1, 2, 3, 4, 5], tooltip="Sensitivity Helps in Marking New S/R Zone : " 
+  + "\n 1 => Least Sensitive (Very Picky)" +  "\n 5 => Most Sensitive (Senses Slight Changes in MACD )", group="MACD SETTINGS")
+  
+gaps = true
+macdflen = mset == "8, 17" ? 8 : mset == "13, 27" ? 13 : mset == "15, 31" ? 15 : 20
+macdslen = mset == "8, 17" ? 17 : mset == "13, 27" ? 27 : mset == "15, 31" ? 31 : 41
+
+//}
+
+// FUNCTIONS
+// {
+_macd() =>
+    macdSrc     = close
+    FastMa = maType == "EMA" ? ema(macdSrc, macdflen) : sma(macdSrc, macdflen)
+    SlowMa = maType == "EMA" ? ema(macdSrc, macdslen) : sma(macdSrc, macdslen)
+    macd    = FastMa - SlowMa
+    macd
+    
+_signal() =>
+
+    macdSrc     = close
+    FastMa = maType == "EMA" ? ema(macdSrc, macdflen) : sma(macdSrc, macdflen)
+    SlowMa = maType == "EMA" ? ema(macdSrc, macdslen) : sma(macdSrc, macdslen)
+    macd    = FastMa - SlowMa
+    signal  = maType == "EMA" ? ema(macd, siglen) : sma(macd, siglen)
+    signal 
+
+//}
+
+// CALCULATION
+// {
+htfRes = i_htfRes == "0" ? "" : i_htfRes 
+macd   = htf(htfRes, _macd(), gaps)
+signal = htf(htfRes, _signal(), gaps)
+
+// Calculate hist 
+hist    = htf(htfRes, macd - signal, 0)
+//}
+
+//}
+
+//*************** FILTERS ***************//
+// {
+
+// INPUT
+// {
+useFilt = input(false, "Use Filter", group="FILTER")
+useMacdFilt = input(true, "Use Macd Zero Line Filter", input.bool, group="FILTER")
+useLinRegFilt = input(true, "Use Linear Regression Filter?", input.bool, group="FILTER")
+entryInval = input(false, "Zone Invalidation?", input.bool, group="FILTER")
+//}
+
+//***** MONEY FLOW *****//
+// {
+mfRes = htfRes
+mfLen = 14 //input(14, "Money FLow Length", input.integer, minval=1, maxval=2000, group="FILTER: MONEY FLOW")
+mfOb = input(70, "MF Overbought", input.integer, group="FILTER: MONEY FLOW")
+mfOs = input(30, "MF Oversold", input.integer, group="FILTER: MONEY FLOW")
+mfSrc = htf(mfRes, hlc3, gaps)
+upper = htf(mfRes, sum(volume * (change(mfSrc) <= 0 ? 0 : mfSrc), mfLen), 0)
+lower = htf(mfRes, sum(volume * (change(mfSrc) >= 0 ? 0 : mfSrc), mfLen), 0)
+_rsi(upper, lower) => 100.0 - (100.0 / (1.0 + upper / lower))
+mf = _rsi(upper, lower)
+//}
+// Signals ==> mf
+
+//===== FILTER EXECUTION =====//
+// {
+filtLong =
+  useFilt ? crossover(mf, mfOs) : 1
+  
+filtShort =
+  useFilt ? crossunder(mf, mfOb) : 1
+
+//}
+
+//}
+
+// ADDON: CB LINEAR REGRESSION =================================================
+// =============================================================================
+// {
+
+// INPUTS
+// {
+linreg_src = input(close, "Source", input.source, group="GENERAL SETTINGS")
+dev1Len = input(1.0, "Deviation 1", input.float, minval=0.1, step=0.1, group="GENERAL SETTINGS")
+dev2Len = input(2.0, "Deviation 1", input.float, minval=0.1, step=0.1, group="GENERAL SETTINGS")
+dev3Len = input(3.0, "Deviation 1", input.float, minval=0.1, step=0.1, group="GENERAL SETTINGS")
+extendit = input(true, "Extend Lines?", input.bool, group="GENERAL SETTINGS")
+showbroken = input(false, "Show Broken Channel",  input.bool, group="GENERAL SETTINGS")
+upcol = input(defval = color.lime, title = "Up Color", group="GENERAL SETTINGS")
+dncol = input(defval = color.red, title = "Down Color", group="GENERAL SETTINGS")
+widt = input(defval = 2, title = "Line Width", group="GENERAL SETTINGS")
+
+chann1Len = input(100, "Channel 1 Length", input.integer, minval=1, group="CHANNEL SETTINGS")
+i_chann2Len = input(50, "Channel 2 Length", input.integer, minval=1, group="CHANNEL SETTINGS")
+chann2Res = input("240", "Channel 2 Timeframe", group="CHANNEL SETTINGS")
+useDev = input(2, "Deviation as Basis", input.integer, options=[1,2,3], tooltip="What Deviation will be set as the basis for calcualtion?", group="CHANNEL SETTINGS")
+revZone = input(2, "Zone for Reversal", input.integer, options=[2,3], tooltip="What Zone Will you Expect a Reversal", group="CHANNEL SETTINGS")
+// }
+
+// CALCUALTIONS
+// {
+var colors = array.new_color(2)
+if barstate.isfirst
+    array.unshift(colors, upcol)
+    array.unshift(colors, dncol)
+    
+get_channel(linreg_src, len, res)=>
+    mid = res == "" ? sum(linreg_src, len) / len : htf(res, sum(linreg_src, len) / len, 0)
+    slope = res == "" ? linreg(linreg_src, len, 0) - linreg(linreg_src, len, 1) : htf(res, linreg(linreg_src, len, 0) - linreg(linreg_src, len, 1), 0)
+    intercept  = mid - slope * floor(len / 2) + ((1 - (len % 2)) / 2) * slope
+    endy = intercept  + slope * (len - 1) 
+    dev = 0.0
+    for x = 0 to len - 1
+        dev := dev + pow(linreg_src[x] - (slope * (len - x) + intercept), 2)
+    dev := sqrt(dev/len)
+    [intercept, endy, dev, slope]
+
+chann2Len = periodConv(i_chann2Len, chann2Res)
+
+[y1_, y2_, dev, slope] = get_channel(linreg_src, chann1Len, "")
+[htfy1_, htfy2_, htfdev, htfslope] = get_channel(linreg_src, i_chann2Len, chann2Res)
+
+devlen = useDev == 1 ? dev1Len : useDev == 2 ? dev2Len : dev3Len 
+outofchannel1 = (slope > 0 and close < y2_ - dev * devlen) ? 0 : (slope < 0 and close > y2_ + dev * devlen) ? 2 : -1
+outofchannel2 = (htfslope > 0 and close < htfy2_ - htfdev * devlen) ? 0 : (htfslope < 0 and close > htfy2_ + htfdev * devlen) ? 2 : -1
+
+// }
+
+// FUNCTION: DRAW CHANNELS
+// {
+drawChannel(OutOChan, chanlen, _y1_, _y2_, _dev, _slope) =>
+    var reglines11 = array.new_line(3)
+    var reglines12 = array.new_line(3)
+    var reglines13 = array.new_line(3)
+    for x = 0 to 2
+        if not showbroken or OutOChan != x or nz(OutOChan[1], -1) != -1
+            line.delete(array.get(reglines11, x))
+            line.delete(array.get(reglines12, x))
+            line.delete(array.get(reglines13, x))
+        else
+            line.set_color(array.get(reglines11, x), color = color.blue)
+            line.set_width(array.get(reglines11, x), width = 2)
+            line.set_style(array.get(reglines11, x), style = line.style_dotted)
+            line.set_extend(array.get(reglines11, x), extend = extend.none)
+            
+            line.set_color(array.get(reglines12, x), color = color.blue)
+            line.set_width(array.get(reglines12, x), width = 2)
+            line.set_style(array.get(reglines12, x), style = line.style_dotted)
+            line.set_extend(array.get(reglines12, x), extend = extend.none)
+            
+            line.set_color(array.get(reglines13, x), color = color.red)
+            line.set_width(array.get(reglines13, x), width = 2)
+            line.set_style(array.get(reglines13, x), style = line.style_dotted)
+            line.set_extend(array.get(reglines13, x), extend = extend.none)
+        
+        array.set(reglines11, x, 
+                  line.new(x1 = bar_index - (chanlen - 1), 
+                           y1 = _y1_ + _dev * dev1Len * (x - 1), 
+                           x2 = bar_index, 
+                           y2 = _y2_ + _dev * dev1Len * (x - 1),
+                           color = array.get(colors, round(max(sign(_slope), 0))),
+                           style =  x % 2 == 1 ? line.style_solid : line.style_dashed,
+                           width = widt,
+                           extend = extendit ? extend.right : extend.none))
+                           
+        if x != 1
+            array.set(reglines12, x, 
+                      line.new(x1 = bar_index - (chanlen - 1), 
+                               y1 = _y1_ + _dev * dev2Len * (x - 1), 
+                               x2 = bar_index, 
+                               y2 = _y2_ + _dev * dev2Len * (x - 1),
+                               color = array.get(colors, round(max(sign(_slope), 0))),
+                               style =  x % 2 == 1 ? line.style_solid : line.style_dashed,
+                               width = widt,
+                               extend = extendit ? extend.right : extend.none))
+                               
+            array.set(reglines13, x, 
+                      line.new(x1 = bar_index - (chanlen - 1), 
+                               y1 = _y1_ + _dev * dev3Len * (x - 1), 
+                               x2 = bar_index, 
+                               y2 = _y2_ + _dev * dev3Len * (x - 1),
+                               color = array.get(colors, round(max(sign(_slope), 0))),
+                               style =  x % 2 == 1 ? line.style_solid : line.style_dashed,
+                               width = widt,
+                               extend = extendit ? extend.right : extend.none))
+                               
+            // RETURN THE ARRAYS AND USE IT FOR THE CALCULATION OF FILL ZONES
+            [reglines11, reglines12, reglines13]
+
+[c1a1, c1a2, c1a3] = drawChannel(outofchannel1, chann1Len, y1_, y2_ , dev, slope)
+[c2a1, c2a2, c2a3] = drawChannel(outofchannel2, chann2Len,htfy1_, htfy2_, htfdev, htfslope)
+
+// }
+
+// CHANNEL ZONE CALCULATIONS
+// {
+
+// LINES
+// {
+
+// CHANNEL 1 LINES
+c1a1Upper = array.get(c1a1, 2)
+c1a1Middle = array.get(c1a1, 1)
+c1a1Lower = array.get(c1a1, 0)
+
+c1a2Upper = array.get(c1a2, 2)
+c1a2Lower = array.get(c1a2, 0)
+
+c1a3Upper =  array.get(c1a3, 2)
+c1a3Lower = array.get(c1a3, 0)
+
+// CHANNEL 2 LINES
+c2a1Upper = array.get(c2a1, 2)
+c2a1Middle = array.get(c2a1, 1)
+c2a1Lower = array.get(c2a1, 0)
+
+c2a2Upper = array.get(c2a2, 2)
+c2a2Lower = array.get(c2a2, 0)
+
+c2a3Upper =  array.get(c2a3, 2)
+c2a3Lower = array.get(c2a3, 0)
+
+// }
+
+// CALCULATIONS
+// {
+
+// CALCULATE ZONES
+isWithinZone(line1, line2) =>
+    [l1_x1, l1_y1, l1_x2, l1_y2, l1_slope] = getCoord(line1)
+    [l2_x1, l2_y1, l2_x2, l2_y2, l2_slope] = getCoord(line2)
+    x3 = bar_index
+    
+    l1_y3 = (l1_slope * (x3 - l1_x1)) + l1_y1
+    l2_y3 = (l2_slope * (x3 - l2_x1)) + l2_y1
+    
+    barInZone(max(l1_y3, l2_y3), min(l1_y3, l2_y3), 0)
+
+
+// CHANNEL 1
+c1_wtnUpZone1 = isWithinZone(c1a1Middle, c1a1Upper)
+c1_wtnUpZone2 = isWithinZone(c1a1Upper, c1a2Upper)
+c1_wtnUpZone3 = isWithinZone(c1a2Upper, c1a3Upper)
+
+c1_wtnDnZone1 = isWithinZone(c1a1Middle, c1a1Lower)
+c1_wtnDnZone2 = isWithinZone(c1a1Lower, c1a2Lower)
+c1_wtnDnZone3 = isWithinZone(c1a2Lower, c1a3Lower)
+
+
+// CHANNEL 2
 c2_wtnUpZone1 = isWithinZone(c2a1Middle, c2a1Upper)
 c2_wtnUpZone2 = isWithinZone(c2a1Upper, c2a2Upper)
-c2_wtnUpZone3 = isWithinZone(c2a3Upper, c2a3Upper)
+c2_wtnUpZone3 = isWithinZone(c2a2Upper, c2a3Upper)
 
 c2_wtnDnZone1 = isWithinZone(c2a1Middle, c2a1Lower)
 c2_wtnDnZone2 = isWithinZone(c2a1Lower, c2a2Lower)
-c2_wtnDNZone3 = isWithinZone(c2a3Lower, c2a3Lower)
+c2_wtnDnZone3 = isWithinZone(c2a2Lower, c2a3Lower)
+
+// }
+
+// }
+
+// FUNCTIONS: DRAW CHANNEL DIRECTION LABELS
+// {
+
+drawLabel(chanLen, c_y1, c_slope) =>
+    var label sidelab = label.new(x = bar_index - (chanLen - 1), y = c_y1, text = "S",  size = size.large)
+    
+    txt = c_slope > 0 ? c_slope > c_slope[1] ? "⇑" : "⇗" : c_slope < 0 ? c_slope < c_slope[1] ? "⇓" : "⇘" : "⇒"
+    
+    stl = c_slope > 0 ? c_slope > c_slope[1] ? label.style_label_up : label.style_label_upper_right : c_slope < 0 ? c_slope < c_slope[1] ? label.style_label_down :  
+      label.style_label_lower_right : label.style_label_right
+      
+    label.set_style(sidelab, stl)
+    label.set_text(sidelab, txt)
+    label.set_x(sidelab, bar_index - (chanLen - 1))
+    label.set_y(sidelab, c_slope > 0 ? c_y1 - dev * devlen : c_slope < 0 ? c_y1 + dev * devlen : c_y1)
+    label.set_color(sidelab, c_slope > 0 ? upcol : c_slope < 0 ? dncol : color.blue)
+    
+drawLabel(chann1Len, y1_, slope)
+drawLabel(chann2Len, htfy1_, htfslope)
+
+// }
+
+// CALCULATE ZONE POWER
+// {
+optEntry(thresh) => 
+    c1_pow = c1_wtnUpZone1 ? 1 : c1_wtnUpZone2 ? 2 : c1_wtnUpZone3 ? 3 : c1_wtnDnZone1 ? -1 : c1_wtnDnZone2 ? -2 : c1_wtnDnZone3 ? -3 : 0 
+    c2_pow = c2_wtnUpZone1 ? 1 : c2_wtnUpZone2 ? 2 : c2_wtnUpZone3 ? 3 : c2_wtnDnZone1 ? -1 : c2_wtnDnZone2 ? -2 : c2_wtnDnZone3 ? -3 : 0 
+    
+    sum = c1_pow + c2_pow
+    optimum = abs(sum) >= thresh
+    dir = sum > 0 ? "dn" : "up"
+    
+    [optimum, dir]
+    
+// }
+// optEntry => true/false
+
+// }
+// END OF ADDON ================================================================
+// =============================================================================
+
+//*************** S/R ZONES ***************//
+// {
+
+//MACD HIST PIVOT POINT
+hsens = 6 - histSens
+histIncBelow = useMacdFilt ? htf(htfRes, rising(hist, hsens), 0) and hist < 0 and macd < 0 : 
+  htf(htfRes, rising(hist, hsens), 0) and hist < 0 
+  
+histDecAbove = useMacdFilt ? htf(htfRes, falling(hist, hsens), 0) and hist > 0 and macd > 0 : 
+  htf(htfRes, falling(hist, hsens), 0) and hist > 0
+
+startIncBelow = htf(htfRes, histIncBelow[1] == false and histIncBelow == true, 0)
+  
+startDecAbove = htf(htfRes, histDecAbove[1] == false and histDecAbove == true, 0) 
+
+////////////////////////////////////////
+
+//To Mark out zone, mark the highs and the lows of the htf candles
+htfbarHigh = htf(htfRes, max(high, high[1], high[2]), 0)
+htfbarLow = htf(htfRes, min(low, low[1], low[2]), 0)
+
+longZnHigh = startIncBelow ? htfbarHigh : na
+longZnLow = startIncBelow ? htfbarLow : na
+
+var longTop = 0.0
+var longBott = 0.0
+
+if (startIncBelow)
+    longTop := longZnHigh
+    longBott := longZnLow
+    
+shortZnHigh = startDecAbove ? htfbarHigh : na
+shortZnLow = startDecAbove ?  htfbarLow : na
+
+var shortTop = 0.0
+var shortBott = 0.0
+
+if (startDecAbove)
+    shortTop := shortZnHigh
+    shortBott := shortZnLow
+
+//}
+
+//*************** STRATEGY EXECUTIONS ***************//
+// {
+
+// TRIGGER
+// {
+
+// NOTE: This method references two bars behind; Current bar is the execution bar//
+// DETECTING ENTRY TRIGGER FOR LONGS 
+// {
+prevBar2InLongZn = barInZone(longTop, longBott, 2)
+prevBar2AboveLongZn = (not prevBar2InLongZn) and low[2] > longTop
+prevBar2BelowLongZn = (not prevBar2InLongZn) and high[2] < longBott
+
+prevBarInLongZn = barInZone(longTop, longBott, 1)
+prevBarAboveLongZn = (not prevBarInLongZn) and low[1] > longTop
+prevBarBelowLongZn = (not prevBarInLongZn) and high[1] < longBott
+
+
+// Find the first bar to leave the zone, after the new zone forms
+barLeavesLongZn = prevBar2InLongZn and (not prevBarInLongZn)
+
+longEntryValid = barLeavesLongZn and low[1] > longTop
+longEntryInvalid = barLeavesLongZn and high[1] < longBott
+//}
+
+// DETECTING ENTRY TRIGGER FOR SHORTS 
+// {
+prevBar2InShortZn = barInZone(shortTop, shortBott, 2)
+prevBar2AboveShortZn = (not prevBar2InShortZn) and low[2] > shortTop
+prevBar2BelowShortZn = (not prevBar2InShortZn) and high[2] < shortBott
+
+prevBarInShortZn = barInZone(shortTop, shortBott, 1)
+prevBarAboveShortZn = (not prevBarInShortZn) and low[1] > shortTop
+prevBarBelowShortZn = (not prevBarInShortZn) and high[1] < shortBott
+
+
+// Find the first bar to leave the zone, after the new zone forms
+barLeavesShortZn = prevBar2InShortZn and (not prevBarInShortZn)
+
+shortEntryValid = barLeavesShortZn and high[1] < shortBott
+shortEntryInvalid = barLeavesShortZn and low[1] > shortTop
+//}
+
+//}
+/////////////////////////////////////////
+
+// SCREENER
+// {
+
+// SCREENING ENTRY CONDITIONS FOR LONGS 
+// {
+var goLongValid = false
+var pendingLong = false
+
+newLongZn = change(longTop) or change(longBott)
+
+if newLongZn
+    goLongValid := false
+    pendingLong := false
+
+if longEntryInvalid
+    goLongValid := false
+    pendingLong := false    
+
+if entryInval    
+    if barssince(longEntryInvalid) < barssince(newLongZn)
+        goLongValid := false
+        pendingLong := false
+        
+else if longEntryValid
+    goLongValid := true
+    pendingLong := true
+    
+//}
+//Signals ==> pendingLong
+
+// SCREENING ENTRY CONDITIONS FOR SHORTS 
+// {
+var goShortValid = false
+var pendingShort = false
+
+newShortZn = change(shortTop) or change(shortBott)
+
+if newShortZn
+    goShortValid := false
+    pendingShort := false
+    
+if shortEntryInvalid
+    goShortValid := false
+    pendingShort := false    
+
+if entryInval      
+    if barssince(shortEntryInvalid) < barssince(newShortZn)
+        goShortValid := false
+        pendingShort := false
+    
+if shortEntryValid
+    goShortValid := true
+    pendingShort := true
+//}
+//Signals ==> pendingShort
+// }
+/////////////////////////////////////////
+
+// EXECUTIONS
+// {
+
+// FOR STUDY
+currBarInLongZn = barInZone(longTop, longBott, 0)
+currBarInShortZn = barInZone(shortTop, shortBott, 0)
+
+priceRetouchLong = pendingLong and prevBarAboveLongZn and currBarInLongZn
+priceRetouchShort = pendingShort and prevBarBelowShortZn and currBarInShortZn
+
+/////////////////////////////////////////
+
+//FOR STRATEGY
+
+//*** FILTER APPLICATION ***//
+var entLongActive = false
+var entShortActive = false
+
+if (barssince(filtLong) < barssince(priceRetouchLong))
+    entLongActive := true
+else 
+    entLongActive := false
+    
+if (barssince(filtShort) < barssince(priceRetouchShort))
+    entShortActive := true
+else
+    entShortActive := false
+
+goLong = useFilt ? priceRetouchLong and (barssince(entLongActive) <= 1) : priceRetouchLong
+goShort = useFilt ? priceRetouchShort and (barssince(entShortActive) <= 1) : priceRetouchShort
+
+var entryID = 0
+
+if goLong or goShort
+    entryID := entryID + 1
+
+//}
+
+//}
+
+//*************** RISK MANAGEMENT ***************//
+// {
+
+// INPUTS
+// {
+slAtrLen = 14 //input(14, "SL ATR Length", input.integer, minval=1, group="RISK MANAGEMENT")
+slAtrMult = input(1, "ATR Multiplier", input.float, minval=0.01, step=0.25, group="RISK MANAGEMENT")
+tpRRR = input(1.5, "Reward-Risk Ratio", input.float, minval=0.01, step=0.25, group="RISK MANAGEMENT")
+//}
+
+//CONDITIONS
+// {
+slAtr = atr(slAtrLen) * slAtrMult
+
+var slLong = float(na)
+var slShort = float(na)
+var tpLong = float(na)
+var tpShort = float(na)
+
+if goLong
+    slLong := longBott - slAtr
+    tpLong := sltotp(longTop, slLong, tpRRR)
+
+if goShort
+    slShort := shortTop + slAtr
+    tpShort  := sltotp(shortBott, slShort, tpRRR)
+//}
+
+//}
+
+//*************** POSITION REVERSAL ALGORITHM ***************//
+// {
+
+// INPUTS
+// {
+useRev = input(false, "Take Reverse Entries?", input.bool, group="REVERSE POSITIONS")
+revRRR = input(1, "Reward-Risk Ratio For Reverse Positions", input.float, minval=0.01, step=0.25, group="REVERSE POSITIONS")
+useRevAtr = input(true, "Add ATR Buffer for Reverse Positions?", input.bool, group="REVERSE POSITIONS")
+//}
+
+// CONDITIONS
+// {
+
+posLongClosed = barInTradeZone(tpLong, slLong, 1) and (not barInTradeZone(tpLong, slLong, 0)) 
+pCLongGain = posLongClosed and (high >= tpLong)
+pCLongLoss = posLongClosed and (low <= slLong)
+
+posShortClosed = barInTradeZone(slShort, tpShort, 1) and (not barInTradeZone(tpShort, slShort, 0))
+pCShortGain = posShortClosed and (low <= tpShort)
+pCShortLoss = posShortClosed and (high >= slShort)
+//}
+
+//EXECUTION
+//{
+var revSlLong = float(na)
+var revSlShort = float(na)
+var revTpLong = float(na)
+var revTpShort = float(na)
+var revLongPending = false 
+var revShortPending = false
+
+if pCShortLoss
+    revSlLong := useRevAtr ? shortBott - slAtr : shortBott
+    revTpLong := sltotp(slShort, revSlLong, revRRR)
+    revLongPending := true
+
+if pCLongLoss
+    revSlShort := useRevAtr ? longTop + slAtr : longTop
+    revTpShort := sltotp(slLong, revSlShort, revRRR)
+    revShortPending := true
+    
+posLongActive = barssince(goLong) < barssince(posLongClosed)
+posShortActive = barssince(goShort) < barssince(posShortClosed)
+
+var revforEntryID = -1
+
+revGoLong = entryID != revforEntryID ? revLongPending and pCShortLoss and (close > slShort) : na
+revGoShort = entryID != revforEntryID ? revShortPending and pCLongLoss and (close < slLong) : na
+//}
+
+//}
+
+//*************** VARIABLE RESET ALGORITHM ***************//
+// {
+
+// BLOCKS MORE THAN ONE REVERSE ENTRIES
+if revGoLong
+    revLongPending := false
+if revGoShort
+    revShortPending := false
+    
+// RESETS REVERSE ENTRIES WHEN NEW ENTRIES ARE FOUND
+if goLong 
+    revShortPending := false
+if goShort
+    revLongPending := false
+
+
+// ONE REVERSE ENTRY PER TRADE
+if revGoLong
+    revforEntryID := entryID
+if revGoShort
+    revforEntryID := entryID
+
+//}
+
+// PLOTS
+// {
+
+// APPLY LINEAR REGRESSION FILTER
+// {
+[optimum, optDir] = optEntry(5)
+
+optGoLong = barssince(optimum and optDir == "up") < barssince(goLong)
+optGoShort = barssince(optimum and optDir == "dn") < barssince(goShort)
+// }
+
+
+//PLOTS FOR LONGS
+longZnTop = plot(longTop, "Long Zone Top", color.blue, linewidth=2)
+longZnBott = plot(longBott, "Long Zone Bottom", color.new(color.blue, 70), linewidth=2)
+longZnStop = plot(longBott - slAtr, "Long Zone Stop", color.new(color.gray, 70), linewidth=2)
+fill(longZnTop, longZnBott, color.new(color.olive, 75))
+fill(longZnStop, longZnBott, color.new(color.olive, 90))
+
+//PLOTS FOR SHORTS
+shortZnTop = plot(shortTop, "Short Zone Top", color.new(color.blue, 70), linewidth=2)
+shortZnBott = plot(shortBott, "Short Zone Bottom", color.blue, linewidth=2)
+shortZnStop = plot(shortTop + slAtr, "Short Zone Stop", color.new(color.gray, 70), linewidth=2)
+fill(shortZnTop, shortZnBott, color.new(#e81c34, 75))
+fill(shortZnStop, shortZnTop, color.new(#e81c34, 90))
+
+plotshape(goLong, "Long", shape.triangleup, location.belowbar, color.lime, size = size.small)
+plotshape(goShort, "Short", shape.triangledown, location.abovebar, color.maroon, size = size.small)
+
+plotshape(useRev ? revGoLong : na, "Reverse Long", shape.triangleup, location.belowbar, color.white, size = size.small, text="Rev Long")
+plotshape(useRev ? revGoShort : na, "Reverse Short", shape.triangledown, location.abovebar, color.white, size = size.small, text="Rev Short")
+
+//}
