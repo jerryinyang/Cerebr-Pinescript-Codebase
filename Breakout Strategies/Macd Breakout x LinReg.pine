@@ -369,8 +369,8 @@ drawLabel(chann2Len, htfy1_, htfslope)
 // CALCULATE ZONE POWER
 // {
 optEntry(thresh) => 
-    c1_pow = c1_wtnUpZone1 ? 1 : c1_wtnUpZone2 ? 2 : c1_wtnUpZone3 ? 3 : c1_wtnUpZone1 ? -1 : c1_wtnUpZone2 ? -2 : c1_wtnUpZone3 ? -3 : 0 
-    c2_pow = c2_wtnUpZone1 ? 1 : c2_wtnUpZone2 ? 2 : c2_wtnUpZone3 ? 3 : c2_wtnUpZone1 ? -1 : c2_wtnUpZone2 ? -2 : c2_wtnUpZone3 ? -3 : 0 
+    c1_pow = c1_wtnUpZone1 ? 1 : c1_wtnUpZone2 ? 2 : c1_wtnUpZone3 ? 3 : c1_wtnDnZone1 ? -1 : c1_wtnDnZone2 ? -2 : c1_wtnDnZone3 ? -3 : 0 
+    c2_pow = c2_wtnUpZone1 ? 1 : c2_wtnUpZone2 ? 2 : c2_wtnUpZone3 ? 3 : c2_wtnDnZone1 ? -1 : c2_wtnDnZone2 ? -2 : c2_wtnDnZone3 ? -3 : 0 
     
     sum = c1_pow + c2_pow
     optimum = abs(sum) >= thresh
@@ -689,7 +689,7 @@ optGoLong = barssince(optimum and optDir == "up") < barssince(goLong)
 optGoShort = barssince(optimum and optDir == "dn") < barssince(goShort)
 // }
 
-bgcolor( optimum and optDir == "up" ? color.orange : na)
+bgcolor( optimum and optDir == "dn" ? color.orange : na)
 
 //PLOTS FOR LONGS
 longZnTop = plot(longTop, "Long Zone Top", color.blue, linewidth=2)
