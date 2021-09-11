@@ -1,0 +1,352 @@
+
+//@version=4
+strategy("Charles' RSI Strategy", overlay=true, pyramiding=2, default_qty_value= 5000)
+
+// FUNCTIONS {
+htf(_res, _exp, gaps_on)  => gaps_on == 0 ? security(syminfo.tickerid, _res, _exp) :
+  gaps_on == true ? security(syminfo.tickerid, _res, _exp, barmerge.gaps_on, barmerge.lookahead_off ) : 
+  security(syminfo.tickerid, _res, _exp, barmerge.gaps_off, barmerge.lookahead_off )
+  
+lineInZone(_top, _bott, _line) => (_line <= _top and _line >= _bott )
+// }
+
+// PARAMETERS
+// {
+rsiRes = input("", "RSI Timeframe", input.resolution, group="RSI SETTING")
+rsiLen = input(14, "RSI Length", input.integer, group="RSI SETTING")
+i_rsiOb = input(70, "RSI Overbought", input.integer, group="RSI SETTING")
+i_rsiOs = input(30, "RSI Oversold", input.integer, group="RSI SETTING")
+// }
+
+// RSI CALCULATIONS
+// {
+rsi = htf(rsiRes, rsi(close,rsiLen), 0)
+rsiOb = crossover(rsi, i_rsiOb), rsiOs = crossunder(rsi, i_rsiOs)
+
+baseZn = 50, obBaseX = i_rsiOs, osBaseX = i_rsiOb
+
+// }
+
+// MOVING AVERAGES {
+
+fastMaLen = input(20, "Fast MA Lenght", input.integer, group="MOVING AVERAGE")
+slowMaLen = input(50, "Slow MA Lenght", input.integer, group="MOVING AVERAGE")
+
+fastMa = ema(close, fastMaLen), slowMa = ema(close, slowMaLen)
+
+maBuyCond = fastMa > slowMa, maSellCond = fastMa < slowMa
+maLong = crossover(fastMa, slowMa), maShort = crossunder(fastMa, slowMa)
+
+// }
+
+// OB/OS - BASE SEQUENCING
+// { 
+
+// TRIGGER FOR BASE ZONE TOUCH : OVERBOUGHT {
+
+obZnLimTop = max(baseZn, obBaseX), obZnLimBott = min(baseZn, obBaseX)
+
+rsiInObLimZn = crossunder(rsi, obZnLimTop) and obZnLimBott <= rsi
+rsiAboveObLimZn = (not rsiInObLimZn) and rsi > obZnLimTop
+rsiBelowObLimZn = (not rsiInObLimZn) and rsi < obZnLimBott
+    
+// }
+
+// TRIGGER FOR BASE ZONE TOUCH : OVERSOLD {
+
+osZnLimTop = max(baseZn, osBaseX), osZnLimBott = min(baseZn, osBaseX)
+
+rsiInOsLimZn = crossover(rsi, osZnLimBott) and osZnLimTop >= rsi
+rsiAboveOsLimZn = (not rsiInOsLimZn) and rsi > osZnLimTop
+rsiBelowOsLimZn = (not rsiInOsLimZn) and rsi < osZnLimBott
+    
+// }
+
+// SEQUENCING ALGORITHM FOR SELL/OVERBOUGHT SCEANRIOS
+// {
+
+useEmaForCount = input(true, "Apply EMA Rule When Counting Each Overbought/Oversold?", input.bool, group="ENTRIES")
+emaLongCount = useEmaForCount ? maBuyCond : 1
+emaShortCount = useEmaForCount ? maSellCond : 1
+
+var countOB = 0
+var countObZn = 0
+
+var obDone = "none"
+var obNext = "" 
+
+if obNext == ""
+    if rsiOb and countOB == 0 and emaLongCount
+        countOB := 1
+        obDone := "ob 1"
+        obNext := "lim 1"
+    
+else if obNext == "lim 1"
+    if rsiInObLimZn and countObZn == 0 and obDone == "ob 1"
+        countObZn := 1
+        obDone := "lim 1"
+        obNext := "ob 2"
+
+else if obNext == "ob 2"
+    if rsiOb and countOB == 1 and obDone == "lim 1" and emaLongCount
+        countOB := 2
+        obDone := "ob 2"
+        obNext := "lim 2"
+
+else if obNext == "lim 2"
+    if rsiInObLimZn and countObZn == 1 and obDone == "ob 2"
+        countObZn := 2
+        obDone := "lim 2"
+        obNext := "ob 3"
+        
+else if obNext == "ob 3"
+    if rsiOb and countOB == 2 and obDone == "lim 2" and emaLongCount
+        countOB := 3
+        obDone := "ob 3"
+        obNext := "lim 3"
+
+else if obNext == "lim 3"
+    if rsiInObLimZn and countObZn == 2 and obDone == "ob 3"
+        countObZn := 3
+        obDone := "lim 3"
+        obNext := "ob 4"
+    
+else if obNext == "ob 4"
+    if rsiOb and countOB == 3 and obDone == "lim 3" and emaLongCount
+        countOB := 4
+        obDone := "ob 4"
+        obNext := "lim 4"
+
+else if obNext == "lim 4"
+    if rsiInObLimZn and countObZn == 3 and obDone == "ob 4"
+        countObZn := 4
+        obDone := "lim 4"
+
+// }
+
+// SEQUENCING ALGORITHM FOR BUY/OVERSOLD SCEANRIOS
+// {
+    
+var countOS = 0
+var countOsZn = 0
+
+var osDone = "none"
+var osNext = "" 
+
+if osNext == ""
+    if rsiOs and countOS == 0 and emaShortCount
+        countOS := 1
+        osDone := "os 1"
+        osNext := "lim 1"
+    
+else if osNext == "lim 1"
+    if rsiInOsLimZn and countOsZn == 0 and osDone == "os 1"
+        countOsZn := 1
+        osDone := "lim 1"
+        osNext := "os 2"
+
+else if osNext == "os 2"
+    if rsiOs and countOS == 1 and osDone == "lim 1" and emaShortCount
+        countOS := 2
+        osDone := "os 2"
+        osNext := "lim 2"
+
+else if osNext == "lim 2"
+    if rsiInOsLimZn and countOsZn == 1 and osDone == "os 2"
+        countOsZn := 2
+        osDone := "lim 2"
+        osNext := "os 3"
+        
+else if osNext == "os 3"
+    if rsiOs and countOS == 2 and osDone == "lim 2" and emaShortCount
+        countOS := 3
+        osDone := "os 3"
+        osNext := "lim 3"
+
+else if osNext == "lim 3"
+    if rsiInOsLimZn and countOsZn == 2 and osDone == "os 3"
+        countOsZn := 3
+        osDone := "lim 3"
+        osNext := "os 4"
+    
+else if osNext == "os 4"
+    if rsiOs and countOS == 3 and osDone == "lim 3" and emaShortCount
+        countOS := 4
+        osDone := "os 4"
+        osNext := "lim 4"
+
+else if osNext == "lim 4"
+    if rsiInOsLimZn and countOsZn == 3 and osDone == "os 4"
+        countOsZn := 4
+        osDone := "lim 4"
+
+// }
+
+// RESET OF COUNTERS
+// {
+
+if rsiBelowObLimZn
+    countOB := 0
+    countObZn := 0
+    obDone := "none"
+    obNext := "" 
+    
+if rsiAboveOsLimZn
+    countOS := 0
+    countOsZn := 0
+    osDone := "none"
+    osNext := ""
+
+// }
+
+// }
+
+// VARIABLE STORAGE FOR EXIT POINTS {
+var longTP = 0.0, var longTP2 = 0.0
+var shortTP = 0.0, var shortTP2 = 0.0
+
+if not (strategy.position_size > 0)
+    if osDone == "os 2" and osDone[1] == "os 2"
+        longTP := low
+    if osDone == "os 1" and osDone[1] == "os 1"
+        longTP2 := low
+        
+if not (strategy.position_size < 0)
+    if obDone == "ob 2" and obDone[1] == "ob 2"
+        shortTP := high
+    if obDone == "ob 1" and obDone[1] == "ob 1"
+        shortTP2 := high
+
+// }
+
+// ENTRIES
+// {
+
+obosInRow = input(4, "How many Overbought/Oversold Signals Before Entries?", options=[2, 3, 4], group="ENTRIES")
+
+// ALGORITHM
+// {
+longEntLimit = obosInRow == 2 ? osDone == "os 2" : obosInRow == 3 ? osDone == "os 3" : osDone == "os 4"
+shortEntLimit = obosInRow == 2 ? obDone == "ob 2" : obosInRow == 3 ? obDone == "ob 3" : obDone == "ob 4"
+
+longCond = maSellCond and longEntLimit
+shortCond = maBuyCond and shortEntLimit 
+
+var longPending = false, var shortPending = false
+
+if longCond
+    longPending := true
+if shortCond
+    shortPending := true
+
+goLong = longPending and maLong
+goShort = shortPending and maShort
+
+// }
+
+// RESET COUNTERS AFTER ENTRIES
+// {
+if goLong 
+    longPending := false
+    countOS := 0
+    countOsZn := 0
+    osDone := "none"
+    osNext := ""
+    
+if goShort
+    shortPending := false
+    countOB := 0
+    countObZn := 0
+    obDone := "none"
+    obNext := "" 
+// }
+
+if (goLong)
+    strategy.entry("Buy", strategy.long)
+    strategy.exit("Exit Buy", "Buy", limit=longTP)
+if (goShort)
+    strategy.entry("Sell", strategy.short)
+    strategy.exit("Exit Sell", "Sell", limit=shortTP)
+    
+// }
+
+// EXTRA ENTRIES
+// {
+take2Entry = input(false, "Take Secondary Entries?", input.bool, group="Extra (Secondary) Entries")
+incHtf = input("D", "Increment ATR Timeframe", input.resolution, group="Extra (Secondary) Entries")
+incPoint = input("OB/OS Price", "Point of Increment ATR Calculation", options=["OB/OS Price", "Entry Price"], group="Extra (Secondary) Entries")
+incAtrMult = input(1, "ATR Multiplier", input.float, group="Extra (Secondary) Entries")
+incAtr = incAtrMult * htf(incHtf, atr(14), 0)
+
+// INCREMENT CALCULATION POINT
+// {
+var longRevPoint = 0.0, var shortRevPoint = 0.0
+if longEntLimit and not(longEntLimit[1])
+    longRevPoint := low
+if shortEntLimit and not (shortEntLimit[1])
+    shortRevPoint := high
+
+var longEntPoint = 0.0, var shortEntPoint = 0.0
+if goLong
+    longEntPoint := close
+if goShort
+    shortEntPoint := close
+// }
+
+// INCREMENT PRICE
+// {
+var longEnt2Price = 0.0, var shortEnt2Price = 0.0
+
+if incPoint == "OB/OS Price"
+    if longEntLimit and not(longEntLimit[1])
+        longEnt2Price := longRevPoint - incAtr
+    if shortEntLimit and not (shortEntLimit[1])
+        shortEnt2Price := shortRevPoint + incAtr
+    
+if incPoint == "Entry Price"
+    if goLong
+        longEnt2Price := longEntPoint - incAtr
+    if goShort
+        shortEnt2Price := shortEntPoint + incAtr
+// }
+
+// SECODARY ENTRIES
+// {
+
+var pendingLong2 = false, var pendingShort2 = false
+var entryLong = 0.0, var entryShort = 0.0
+
+if goLong
+    pendingLong2 := true
+if goShort
+    pendingShort2 := true
+    
+    
+goLong2 = pendingLong2 and strategy.position_size > 0 and crossunder(close, longEnt2Price)
+goShort2 = pendingShort2 and strategy.position_size < 0 and crossover(close, shortEnt2Price)
+
+if goLong2
+    pendingLong2 := false
+if goShort2
+    pendingShort2 := false
+
+// }
+
+if take2Entry
+    if (goLong2)
+        strategy.entry("2nd Buy", strategy.long)
+        strategy.exit("Exit 2nd Buy", "2nd Buy", limit=longTP)
+    if (goShort2)
+        strategy.entry("2nd Sell", strategy.short)
+        strategy.exit("Exit 2nd Sell", "2nd Sell", limit=shortTP)
+
+// }
+
+// PLOTS
+// {
+plotshape(goLong2, "Long", shape.triangleup, location.belowbar, color.lime, text="2nd Long", size = size.small)
+plotshape(goShort2, "Short", shape.triangledown, location.abovebar, color.maroon, text="2nd Short", size = size.small)
+// }
+
+
+plot(longTP)

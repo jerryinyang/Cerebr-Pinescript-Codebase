@@ -58,45 +58,50 @@ periodConv(_len, _res) =>
 
 // INPUTS
 // {
-src = input(close, "Source", input.source, group="GENERAL SETTINGS")
-dev1Len = input(1.0, "Deviation 1", input.float, minval=0.1, step=0.1, group="GENERAL SETTINGS")
-dev2Len = input(2.0, "Deviation 1", input.float, minval=0.1, step=0.1, group="GENERAL SETTINGS")
-dev3Len = input(3.0, "Deviation 1", input.float, minval=0.1, step=0.1, group="GENERAL SETTINGS")
-extendit = input(true, "Extend Lines?", input.bool, group="GENERAL SETTINGS")
-showbroken = input(false, "Show Broken Channel",  input.bool, group="GENERAL SETTINGS")
-upcol = input(defval = color.lime, title = "Up Color", group="GENERAL SETTINGS")
-dncol = input(defval = color.red, title = "Down Color", group="GENERAL SETTINGS")
-widt = input(defval = 2, title = "Line Width", group="GENERAL SETTINGS")
+chann1Len = input(100, "Channel 1 Length", input.integer, minval=1, group="LINEAR REGRESSION: CHANNELS")
+i_chann2Len = input(50, "Channel 2 Length", input.integer, minval=1, group="LINEAR REGRESSION: CHANNELS")
+chann2Res = input("240", "Channel 2 Timeframe", group="LINEAR REGRESSION: CHANNELS")
+useDev = 2
+// input(2, "Deviation as Basis", input.integer, options=[1,2,3], 
+//  tooltip="What Deviation will be set as the basis for calcualtion?", group="LINEAR REGRESSION: CHANNELS")
+revZone = 2 
+  //input(2, "Zone for Reversal", input.integer, options=[2,3], tooltip="What Zone Will you Expect a Reversal", group="LINEAR REGRESSION: CHANNELS")
 
-chann1Len = input(100, "Channel 1 Length", input.integer, minval=1, group="CHANNEL SETTINGS")
-i_chann2Len = input(50, "Channel 2 Length", input.integer, minval=1, group="CHANNEL SETTINGS")
-chann2Res = input("240", "Channel 2 Timeframe", group="CHANNEL SETTINGS")
-useDev = input(2, "Deviation as Basis", input.integer, options=[1,2,3], tooltip="What Deviation will be set as the basis for calcualtion?", group="CHANNEL SETTINGS")
-revZone = input(2, "Zone for Reversal", input.integer, options=[2,3], tooltip="What Zone Will you Expect a Reversal", group="CHANNEL SETTINGS")
+showLinReg = input(false, "Show LinReg Channels?", input.bool, group="LINEAR REGRESSION: GENERAL")
+linreg_src = close //input(close, "Source", input.source, group="LINEAR REGRESSION: GENERAL")
+dev1Len = input(1.0, "Deviation 1", input.float, minval=0.1, step=0.1, group="LINEAR REGRESSION: GENERAL")
+dev2Len = input(2.0, "Deviation 1", input.float, minval=0.1, step=0.1, group="LINEAR REGRESSION: GENERAL")
+dev3Len = input(3.0, "Deviation 1", input.float, minval=0.1, step=0.1, group="LINEAR REGRESSION: GENERAL")
+extendit = true //input(true, "Extend Lines?", input.bool, group="LINEAR REGRESSION: GENERAL")
+showbroken = false //input(false, "Show Broken Channel",  input.bool, group="LINEAR REGRESSION: GENERAL")
+upcol = showLinReg ? color.olive : na //input(defval = color.lime, title = "Up Color", group="LINEAR REGRESSION: GENERAL")
+dncol = showLinReg ? color.maroon : na //input(defval = color.red, title = "Down Color", group="LINEAR REGRESSION: GENERAL")
+widt = 2 //input(defval = 2, title = "Line Width", group="LINEAR REGRESSION: GENERAL")
+
 // }
 
 // CALCUALTIONS
 // {
 var colors = array.new_color(2)
 if barstate.isfirst
-    array.unshift(colors, upcol)
-    array.unshift(colors, dncol)
+    array.unshift(colors, showLinReg ? upcol : na)
+    array.unshift(colors, showLinReg ? dncol : na)
     
-get_channel(src, len, res)=>
-    mid = res == "" ? sum(src, len) / len : htf(res, sum(src, len) / len, 0)
-    slope = res == "" ? linreg(src, len, 0) - linreg(src, len, 1) : htf(res, linreg(src, len, 0) - linreg(src, len, 1), 0)
+get_channel(linreg_src, len, res)=>
+    mid = res == "" ? sum(linreg_src, len) / len : htf(res, sum(linreg_src, len) / len, 0)
+    slope = res == "" ? linreg(linreg_src, len, 0) - linreg(linreg_src, len, 1) : htf(res, linreg(linreg_src, len, 0) - linreg(linreg_src, len, 1), 0)
     intercept  = mid - slope * floor(len / 2) + ((1 - (len % 2)) / 2) * slope
     endy = intercept  + slope * (len - 1) 
     dev = 0.0
     for x = 0 to len - 1
-        dev := dev + pow(src[x] - (slope * (len - x) + intercept), 2)
+        dev := dev + pow(linreg_src[x] - (slope * (len - x) + intercept), 2)
     dev := sqrt(dev/len)
     [intercept, endy, dev, slope]
 
 chann2Len = periodConv(i_chann2Len, chann2Res)
 
-[y1_, y2_, dev, slope] = get_channel(src, chann1Len, "")
-[htfy1_, htfy2_, htfdev, htfslope] = get_channel(src, i_chann2Len, chann2Res)
+[y1_, y2_, dev, slope] = get_channel(linreg_src, chann1Len, "")
+[htfy1_, htfy2_, htfdev, htfslope] = get_channel(linreg_src, i_chann2Len, chann2Res)
 
 devlen = useDev == 1 ? dev1Len : useDev == 2 ? dev2Len : dev3Len 
 outofchannel1 = (slope > 0 and close < y2_ - dev * devlen) ? 0 : (slope < 0 and close > y2_ + dev * devlen) ? 2 : -1
@@ -104,7 +109,7 @@ outofchannel2 = (htfslope > 0 and close < htfy2_ - htfdev * devlen) ? 0 : (htfsl
 
 // }
 
-// DRAW CHANNELS
+// FUNCTION: DRAW CHANNELS
 // {
 drawChannel(OutOChan, chanlen, _y1_, _y2_, _dev, _slope) =>
     var reglines11 = array.new_line(3)
@@ -203,8 +208,6 @@ c2a3Lower = array.get(c2a3, 0)
 // CALCULATIONS
 // {
 
-
-
 // CALCULATE ZONES
 isWithinZone(line1, line2) =>
     [l1_x1, l1_y1, l1_x2, l1_y2, l1_slope] = getCoord(line1)
@@ -240,7 +243,7 @@ c2_wtnDnZone3 = isWithinZone(c2a2Lower, c2a3Lower)
 
 // }
 
-// DRAW CHANNEL DIRECTION LABELS
+// FUNCTIONS: DRAW CHANNEL DIRECTION LABELS
 // {
 
 drawLabel(chanLen, c_y1, c_slope) =>
@@ -262,4 +265,17 @@ drawLabel(chann2Len, htfy1_, htfslope)
 
 // }
 
-plot(na)
+// CALCULATE ZONE POWER
+// {
+optEntry(thresh) => 
+    c1_pow = c1_wtnUpZone1 ? 1 : c1_wtnUpZone2 ? 2 : c1_wtnUpZone3 ? 3 : c1_wtnDnZone1 ? -1 : c1_wtnDnZone2 ? -2 : c1_wtnDnZone3 ? -3 : 0 
+    c2_pow = c2_wtnUpZone1 ? 1 : c2_wtnUpZone2 ? 2 : c2_wtnUpZone3 ? 3 : c2_wtnDnZone1 ? -1 : c2_wtnDnZone2 ? -2 : c2_wtnDnZone3 ? -3 : 0 
+    
+    sum = c1_pow + c2_pow
+    optimum = useStrictZn ? abs(c2_pow) >= 2 and abs(sum) >= thresh : abs(sum) >= thresh
+    dir = htfDirEntry ? (((sum > 0) and htfslope < 0) ? "dn" : ((sum < 0) and htfslope > 0) ? "up" : na) : (sum > 0 ? "dn" : "up")
+    
+    [optimum, dir]
+    
+// }
+// optEntry => true/false
