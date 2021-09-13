@@ -1,6 +1,8 @@
+// IN THIS VERSION, ALL 4 OVERBOUGHT/OVERSOLD HAPPEN IN THE SAME EMA CROSS CONDITION
+
 
 //@version=4
-strategy("Charles' RSI Strategy", overlay=true, pyramiding=2, default_qty_value= 5000)
+strategy("Charles' RSI Strategy", overlay=true, pyramiding=1, default_qty_value= 5000)
 
 // FUNCTIONS {
 htf(_res, _exp, gaps_on)  => gaps_on == 0 ? security(syminfo.tickerid, _res, _exp) :
@@ -14,8 +16,8 @@ lineInZone(_top, _bott, _line) => (_line <= _top and _line >= _bott )
 // {
 rsiRes = input("", "RSI Timeframe", input.resolution, group="RSI SETTING")
 rsiLen = input(14, "RSI Length", input.integer, group="RSI SETTING")
-i_rsiOb = input(70, "RSI Overbought", input.integer, group="RSI SETTING")
-i_rsiOs = input(30, "RSI Oversold", input.integer, group="RSI SETTING")
+i_rsiOb = input(72, "RSI Overbought", input.integer, group="RSI SETTING")
+i_rsiOs = input(28, "RSI Oversold", input.integer, group="RSI SETTING")
 // }
 
 // RSI CALCULATIONS
@@ -23,7 +25,10 @@ i_rsiOs = input(30, "RSI Oversold", input.integer, group="RSI SETTING")
 rsi = htf(rsiRes, rsi(close,rsiLen), 0)
 rsiOb = crossover(rsi, i_rsiOb), rsiOs = crossunder(rsi, i_rsiOs)
 
-baseZn = 50, obBaseX = i_rsiOs, osBaseX = i_rsiOb
+obBaseZn = input(55, "Overbought Base Line", input.float, group="OB/OS Sequencing")
+osBaseZn = input(45, "Oversold Base Line", input.float, group="OB/OS Sequencing")
+
+obBaseX = i_rsiOs, osBaseX = i_rsiOb
 
 // }
 
@@ -42,9 +47,11 @@ maLong = crossover(fastMa, slowMa), maShort = crossunder(fastMa, slowMa)
 // OB/OS - BASE SEQUENCING
 // { 
 
+useEmaObOsFilter = input(true, "Use Only One EMA Condition for all OB/OS?", input.bool, group="OB/OS Sequencing")
+
 // TRIGGER FOR BASE ZONE TOUCH : OVERBOUGHT {
 
-obZnLimTop = max(baseZn, obBaseX), obZnLimBott = min(baseZn, obBaseX)
+obZnLimTop = max(obBaseZn, obBaseX), obZnLimBott = min(obBaseZn, obBaseX)
 
 rsiInObLimZn = crossunder(rsi, obZnLimTop) and obZnLimBott <= rsi
 rsiAboveObLimZn = (not rsiInObLimZn) and rsi > obZnLimTop
@@ -54,12 +61,19 @@ rsiBelowObLimZn = (not rsiInObLimZn) and rsi < obZnLimBott
 
 // TRIGGER FOR BASE ZONE TOUCH : OVERSOLD {
 
-osZnLimTop = max(baseZn, osBaseX), osZnLimBott = min(baseZn, osBaseX)
+osZnLimTop = max(osBaseZn, osBaseX), osZnLimBott = min(osBaseZn, osBaseX)
 
 rsiInOsLimZn = crossover(rsi, osZnLimBott) and osZnLimTop >= rsi
 rsiAboveOsLimZn = (not rsiInOsLimZn) and rsi > osZnLimTop
 rsiBelowOsLimZn = (not rsiInOsLimZn) and rsi < osZnLimBott
     
+// }
+
+// EMA CROSS MONITOR
+// {
+var longCondId = 0.0, var shortCondId = 0.0
+prevXLong = valuewhen(maLong, bar_index, 0)
+prevXShort = valuewhen(maShort, bar_index, 0)
 // }
 
 // SEQUENCING ALGORITHM FOR SELL/OVERBOUGHT SCEANRIOS
@@ -77,48 +91,49 @@ var obNext = ""
 
 if obNext == ""
     if rsiOb and countOB == 0 and emaLongCount
+        longCondId := prevXLong
         countOB := 1
         obDone := "ob 1"
         obNext := "lim 1"
     
 else if obNext == "lim 1"
-    if rsiInObLimZn and countObZn == 0 and obDone == "ob 1"
+    if rsiInObLimZn and countObZn == 0 and obDone == "ob 1" and longCondId == prevXLong
         countObZn := 1
         obDone := "lim 1"
         obNext := "ob 2"
 
 else if obNext == "ob 2"
-    if rsiOb and countOB == 1 and obDone == "lim 1" and emaLongCount
+    if rsiOb and countOB == 1 and obDone == "lim 1" and emaLongCount and longCondId == prevXLong
         countOB := 2
         obDone := "ob 2"
         obNext := "lim 2"
 
 else if obNext == "lim 2"
-    if rsiInObLimZn and countObZn == 1 and obDone == "ob 2"
+    if rsiInObLimZn and countObZn == 1 and obDone == "ob 2" and longCondId == prevXLong
         countObZn := 2
         obDone := "lim 2"
         obNext := "ob 3"
         
 else if obNext == "ob 3"
-    if rsiOb and countOB == 2 and obDone == "lim 2" and emaLongCount
+    if rsiOb and countOB == 2 and obDone == "lim 2" and emaLongCount and longCondId == prevXLong
         countOB := 3
         obDone := "ob 3"
         obNext := "lim 3"
 
 else if obNext == "lim 3"
-    if rsiInObLimZn and countObZn == 2 and obDone == "ob 3"
+    if rsiInObLimZn and countObZn == 2 and obDone == "ob 3" and longCondId == prevXLong
         countObZn := 3
         obDone := "lim 3"
         obNext := "ob 4"
     
 else if obNext == "ob 4"
-    if rsiOb and countOB == 3 and obDone == "lim 3" and emaLongCount
+    if rsiOb and countOB == 3 and obDone == "lim 3" and emaLongCount and longCondId == prevXLong
         countOB := 4
         obDone := "ob 4"
         obNext := "lim 4"
 
 else if obNext == "lim 4"
-    if rsiInObLimZn and countObZn == 3 and obDone == "ob 4"
+    if rsiInObLimZn and countObZn == 3 and obDone == "ob 4" and longCondId == prevXLong
         countObZn := 4
         obDone := "lim 4"
 
@@ -135,48 +150,49 @@ var osNext = ""
 
 if osNext == ""
     if rsiOs and countOS == 0 and emaShortCount
+        shortCondId := prevXShort
         countOS := 1
         osDone := "os 1"
         osNext := "lim 1"
     
 else if osNext == "lim 1"
-    if rsiInOsLimZn and countOsZn == 0 and osDone == "os 1"
+    if rsiInOsLimZn and countOsZn == 0 and osDone == "os 1" and shortCondId == prevXShort
         countOsZn := 1
         osDone := "lim 1"
         osNext := "os 2"
 
 else if osNext == "os 2"
-    if rsiOs and countOS == 1 and osDone == "lim 1" and emaShortCount
+    if rsiOs and countOS == 1 and osDone == "lim 1" and emaShortCount and shortCondId == prevXShort
         countOS := 2
         osDone := "os 2"
         osNext := "lim 2"
 
 else if osNext == "lim 2"
-    if rsiInOsLimZn and countOsZn == 1 and osDone == "os 2"
+    if rsiInOsLimZn and countOsZn == 1 and osDone == "os 2" and shortCondId == prevXShort
         countOsZn := 2
         osDone := "lim 2"
         osNext := "os 3"
         
 else if osNext == "os 3"
-    if rsiOs and countOS == 2 and osDone == "lim 2" and emaShortCount
+    if rsiOs and countOS == 2 and osDone == "lim 2" and emaShortCount and shortCondId == prevXShort
         countOS := 3
         osDone := "os 3"
         osNext := "lim 3"
 
 else if osNext == "lim 3"
-    if rsiInOsLimZn and countOsZn == 2 and osDone == "os 3"
+    if rsiInOsLimZn and countOsZn == 2 and osDone == "os 3" and shortCondId == prevXShort
         countOsZn := 3
         osDone := "lim 3"
         osNext := "os 4"
     
 else if osNext == "os 4"
-    if rsiOs and countOS == 3 and osDone == "lim 3" and emaShortCount
+    if rsiOs and countOS == 3 and osDone == "lim 3" and emaShortCount and shortCondId == prevXShort
         countOS := 4
         osDone := "os 4"
         osNext := "lim 4"
 
 else if osNext == "lim 4"
-    if rsiInOsLimZn and countOsZn == 3 and osDone == "os 4"
+    if rsiInOsLimZn and countOsZn == 3 and osDone == "os 4" and shortCondId == prevXShort
         countOsZn := 4
         osDone := "lim 4"
 
@@ -218,20 +234,6 @@ if not (strategy.position_size < 0)
         shortTP2 := high
 
 // }
-
-// // VARIABLE STORAGE FOR EXIT POINTS {
-// var longTP = 0.0
-// var shortTP = 0.0
-
-// if not (strategy.position_size > 0)
-//     if osDone == "os 1" and osDone[1] == "os 1" and rsiOs[1]
-//         longTP := low[1]
-
-// if not (strategy.position_size < 0)
-//     if obDone == "ob 1" and rsiOb
-//         shortTP := high
-
-// // }
 
 // ENTRIES
 // {
@@ -358,9 +360,39 @@ if take2Entry
 
 // PLOTS
 // {
-plotshape(goLong2, "Long", shape.triangleup, location.belowbar, color.lime, text="2nd Long", size = size.small)
-plotshape(goShort2, "Short", shape.triangledown, location.abovebar, color.maroon, text="2nd Short", size = size.small)
+// PLOT TP
+plot(strategy.position_size > 0 ? longTP : na, "Long TP", color.lime)
+plot(strategy.position_size < 0 ? shortTP : na, "Short TP", color.red)
+
+// PLOT PEAKS {
+bgcolor(obDone == "ob 1" and obDone[1] != "ob 1" ? color.maroon : na)
+plotshape(obDone == "ob 1" and obDone[1] != "ob 1" , "Shape: OB 1", shape.labeldown, location.abovebar, color.maroon, text="1", textcolor=color.white, size = size.tiny)
+
+bgcolor(obDone == "ob 2" and obDone[1] != "ob 2" ? color.maroon : na)
+plotshape(obDone == "ob 2" and obDone[1] != "ob 2" , "Shape: OB 2", shape.labeldown, location.abovebar, color.maroon, text="2", textcolor=color.white, size = size.tiny)
+
+bgcolor(obDone == "ob 3" and obDone[1] != "ob 3" ? color.maroon : na)
+plotshape(obDone == "ob 3" and obDone[1] != "ob 3" , "Shape: OB 3", shape.labeldown, location.abovebar, color.maroon, text="3", textcolor=color.white, size = size.tiny)
+
+bgcolor(obDone == "ob 4" and obDone[1] != "ob 4" ? color.maroon : na)
+plotshape(obDone == "ob 4" and obDone[1] != "ob 4" , "Shape: OB 4", shape.labeldown, location.abovebar, color.maroon, text="4", textcolor=color.white, size = size.tiny)
+// }
+
+// PLOT VALLEYS {
+bgcolor(osDone == "os 1" and osDone[1] != "os 1" ? color.olive : na)
+plotshape(osDone == "os 1" and osDone[1] != "os 1" , "Shape: OS 1", shape.labelup, location.belowbar, color.olive, text="1", textcolor=color.white, size = size.tiny)
+
+bgcolor(osDone == "os 2" and osDone[1] != "os 2" ? color.olive : na)
+plotshape(osDone == "os 2" and osDone[1] != "os 2" , "Shape: OS 2", shape.labelup, location.belowbar, color.olive, text="2", textcolor=color.white, size = size.tiny)
+
+bgcolor(osDone == "os 3" and osDone[1] != "os 3" ? color.olive : na)
+plotshape(osDone == "os 3" and osDone[1] != "os 3" , "Shape: OS 3", shape.labelup, location.belowbar, color.olive, text="3", textcolor=color.white, size = size.tiny)
+
+bgcolor(osDone == "os 4" and osDone[1] != "os 4" ? color.olive : na)
+plotshape(osDone == "os 4" and osDone[1] != "os 4" , "Shape: OS 4", shape.labelup, location.belowbar, color.olive, text="4", textcolor=color.white, size = size.tiny)
+// }
+
 // }
 
 
-plot(longTP)
+
