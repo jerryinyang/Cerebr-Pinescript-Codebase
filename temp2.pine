@@ -1,0 +1,49 @@
+// FVG BELOW
+// {
+dnHi = 0.0, dnLo = 0.0
+var dline_mid = line(na), var dline_mid2 = line(na), var dline_mid3 = line(na), var d_delLine = line(na), var d_plotted = 0
+
+dnDataChange = change(dnfvg_datasize)
+new_dnFvg = not dnboxReplaced ? dnDataChange : dnboxReplaced
+
+if dnfvg_datasize > 0 and new_dnFvg 
+    openT = box.get_left(array.get(dnfvgBox, dnfvg_datasize - 1))
+    c_op = change(openT)
+    
+    if c_op
+        dnHi := box.get_top(array.get(dnfvgBox, dnfvg_datasize - 1))
+        dnLo := box.get_bottom(array.get(dnfvgBox, dnfvg_datasize - 1))
+        op = box.get_left(array.get(dnfvgBox, dnfvg_datasize - 1))
+        
+        half = (dnHi + dnLo) / 2
+        
+        if dline_mid == na
+            dline_mid := line.new(op, half, cl, half, xloc.bar_time, extend.none, color.yellow)
+            d_plotted := d_plotted + 1
+            
+        else if dline_mid != na and d_plotted < plotFvgBott
+            if d_plotted == 1 and plotFvgBott > 1
+                dline_mid2 := dline_mid
+                dline_mid := line.new(op, half, cl, half, xloc.bar_time, extend.none, color.yellow)
+            if d_plotted == 2 and plotFvgBott > 2
+                dline_mid3 := dline_mid2
+                dline_mid2 := dline_mid
+                dline_mid := line.new(op, half, cl, half, xloc.bar_time, extend.none, color.yellow)
+            d_plotted := d_plotted + 1
+            
+        else if dline_mid != na and d_plotted == plotFvgBott
+            d_delLine := dline_mid3
+            dline_mid3 := dline_mid2
+            dline_mid2 := dline_mid
+            dline_mid := line.new(op, half, cl, half, xloc.bar_time, extend.none, color.yellow)
+            line.delete(d_delLine)
+            d_plotted := d_plotted
+
+    line.set_extend(dline_mid, extend.right)
+    line.set_extend(dline_mid2, extend.none)
+    line.set_extend(dline_mid3, extend.none)
+    line.set_color(dline_mid, plotFvgBott >= 1 ? color.maroon : color(na))
+    line.set_color(dline_mid2, plotFvgBott >= 2 ? color.new(color.maroon, 70) : color(na))
+    line.set_color(dline_mid3, plotFvgBott >= 3 ? color.new(color.maroon, 40) : color(na))
+
+// }

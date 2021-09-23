@@ -1,20 +1,31 @@
 //@version=4
-study("Order Block Finder", overlay = true)       
-tip1 = "Indicator to help identify instituational Order Blocks (OB). OBs often signal the beginning of a strong move. There is a high probability that OB price levels will be revisited in the future and are interesting levels to place limit orders. Bullish Order block is the last down candle before a sequence of up candles. Bearish Order Block is the last up candle before a sequence of down candles."
-tip2 = "!Experimental!\nFind Order Blocks from different timeframes. Channels prices are accurate, but arrow position is not. Most useful when selecting a timeframe higher than the chart."
+study("OB Finder", overlay = true)
+
+// TIPS
+// {
+tip1 = "Indicator to help identify instituational Order Blocks (OB). OBs often signal the beginning of a strong move." +  
+  "There is a high probability that OB price levels will be revisited in the future and are interesting levels to place limit orders. " + 
+  "Bullish Order block is the last down candle before a sequence of up candles. Bearish Order Block is the last up candle before a sequence of down candles."
+  
+tip2 = "!Experimental!\nFind Order Blocks from different timeframes. Channels prices are accurate, but arrow position is not. " + 
+  "Most useful when selecting a timeframe higher than the chart."
+  
 tip3 = "Required number of subsequent candles in the same direction to identify Order Block"
 tip4 = "Measured from from potential OB close to close of first candle in sequence"
+// }
+
 dummy = input(true,"Hover over ( ! ) for documentation", tooltip = tip1)
 colors    = input("LIGHT","Color Scheme", options=["DARK", "LIGHT"])
-//res = input("","Order Block Timeframe",input.resolution,tooltip=tip2)
-periods   = input(7,     "Relevant Periods to identify OB",tooltip=tip3)    // Required number of subsequent candles in the same direction to identify Order Block
-threshold = input(0.0,   "Min. Percent move for valid OB", step = 0.1, tooltip=tip4)      // Required minimum % move (from potential OB close to last subsequent candle to identify Order Block)
+res = input("","Order Block Timeframe",input.resolution,tooltip=tip2)
+periods   = input(7,     "Relevant Periods to identify OB",tooltip=tip3)    
+  // Required number of subsequent candles in the same direction to identify Order Block
+threshold = input(0.0,   "Min. Percent move for valid OB", step = 0.1, tooltip=tip4)      
+  // Required minimum % move (from potential OB close to last subsequent candle to identify Order Block)
 bull_channels =  input(2, "Number of Bullish Channels to show")             // Num of channels
 bear_channels = input(2, "Number of Bearish Channels to show")              // Num of channels
 
 
 //Data Curation
-res = ""
 [copen,chigh,clow,cclose] = security(syminfo.tickerid,res,[open,high,low,close],barmerge.gaps_on, barmerge.lookahead_off)
 
 
@@ -53,18 +64,22 @@ OB_bear_avg  = (OB_bear_clow + OB_bear_chigh)/2                               //
 
 
 // Plotting
-plotshape(OB_bull, title="Bullish OB", style = shape.triangleup,   color = bullcolor, textcolor = bullcolor, size = size.tiny, location = location.belowbar, offset = -ob_period, text = "Bull")     // Bullish OB Indicator
-bull1 = plot(OB_bull_chigh, title="Bullish OB High", style = plot.style_linebr, color = bullcolor, offset = -ob_period, linewidth = 2)                                               // Bullish OB Upper Limit
-bull2 = plot(OB_bull_clow,  title="Bullish OB Low",  style = plot.style_linebr, color = bullcolor, offset = -ob_period, linewidth = 2)                                               // Bullish OB Lower Limit
-fill(bull1, bull2, color=bullcolor, transp = 50, title = "Bullish OB fill")                                                                                                          // Fill Bullish OB
-plotshape(OB_bull_avg, title="Bullish OB Average", style = shape.cross,   color = bullcolor, size = size.small, location = location.absolute, offset = -ob_period)                 // Bullish OB Average
+plotshape(OB_bull, title="Bullish OB", style = shape.triangleup,   color = bullcolor, textcolor = bullcolor, size = size.tiny, location = location.belowbar, 
+  offset = -ob_period, text = "Bull")     // Bullish OB Indicator
+bull1 = plot(OB_bull_chigh, title="Bullish OB High", style = plot.style_linebr, color = bullcolor, offset = -ob_period, linewidth = 2)      // Bullish OB Upper Limit
+bull2 = plot(OB_bull_clow,  title="Bullish OB Low",  style = plot.style_linebr, color = bullcolor, offset = -ob_period, linewidth = 2)      // Bullish OB Lower Limit
+fill(bull1, bull2, color=bullcolor, transp = 50, title = "Bullish OB fill")                                                                 // Fill Bullish OB
+plotshape(OB_bull_avg, title="Bullish OB Average", style = shape.cross,   
+  color = bullcolor, size = size.small, location = location.absolute, offset = -ob_period) // Bullish OB Average
 
 
-plotshape(OB_bear, title="Bearish OB", style = shape.triangledown, color = bearcolor, textcolor = bearcolor,  size = size.tiny, location = location.abovebar, offset = -ob_period, text = "Bear")     // Bearish OB Indicator
-bear1 = plot(OB_bear_clow,  title="Bearish OB Low",  style = plot.style_linebr, color = bearcolor, offset = -ob_period, linewidth = 2)                                                // Bearish OB Lower Limit
-bear2 = plot(OB_bear_chigh, title="Bearish OB High", style = plot.style_linebr, color = bearcolor, offset = -ob_period, linewidth = 2)                                                // Bearish OB Upper Limit
-fill(bear1, bear2, color=bearcolor, transp = 50, title = "Bearish OB fill")                                                                                                           // Fill Bearish OB
-plotshape(OB_bear_avg, title="Bearish OB Average", style = shape.cross,   color = bearcolor, size = size.small, location = location.absolute, offset = -ob_period)                  // Bullish OB Average
+plotshape(OB_bear, title="Bearish OB", style = shape.triangledown, color = bearcolor, textcolor = bearcolor,  size = size.tiny, location = location.abovebar, 
+  offset = -ob_period, text = "Bear")     // Bearish OB Indicator
+bear1 = plot(OB_bear_clow,  title="Bearish OB Low",  style = plot.style_linebr, color = bearcolor, offset = -ob_period, linewidth = 2)          // Bearish OB Lower Limit
+bear2 = plot(OB_bear_chigh, title="Bearish OB High", style = plot.style_linebr, color = bearcolor, offset = -ob_period, linewidth = 2)          // Bearish OB Upper Limit
+fill(bear1, bear2, color=bearcolor, transp = 50, title = "Bearish OB fill")                                                                     // Fill Bearish OB
+plotshape(OB_bear_avg, title="Bearish OB Average", style = shape.cross,   
+  color = bearcolor, size = size.small, location = location.absolute, offset = -ob_period) // Bullish OB Average
 
 var LineBullAvg = array.new_line()
 var LineBullHigh = array.new_line()
@@ -84,9 +99,12 @@ if OB_bull and bull_channels>0
         line.delete(array.get(LineBullLow,0))
         array.remove(LineBullLow,0)
     
-    array.push(LineBullAvg,line.new(x1 = sync, xloc=xloc.bar_time, y1 = OB_bull_avg, x2 = sync[1], y2 = OB_bull_avg, extend = extend.left, color = bullcolor, style = line.style_solid, width = 1))
-    array.push(LineBullHigh,line.new(x1 = sync, xloc=xloc.bar_time,y1 = OB_bull_chigh, x2 = sync[1], y2 = OB_bull_chigh, extend = extend.left, color = bullcolor, style = line.style_dashed, width = 1))
-    array.push(LineBullLow,line.new(x1 = sync, xloc=xloc.bar_time, y1 = OB_bull_clow, x2 = sync[1], y2 = OB_bull_clow, extend = extend.left, color = bullcolor, style = line.style_dashed, width = 1))
+    array.push(LineBullAvg,line.new(x1 = sync, xloc=xloc.bar_time, y1 = OB_bull_avg, x2 = sync[1], y2 = OB_bull_avg, extend = extend.left, color = bullcolor, 
+      style = line.style_solid, width = 1))
+    array.push(LineBullHigh,line.new(x1 = sync, xloc=xloc.bar_time,y1 = OB_bull_chigh, x2 = sync[1], y2 = OB_bull_chigh, extend = extend.left, color = bullcolor, 
+      style = line.style_dashed, width = 1))
+    array.push(LineBullLow,line.new(x1 = sync, xloc=xloc.bar_time, y1 = OB_bull_clow, x2 = sync[1], y2 = OB_bull_clow, extend = extend.left, color = bullcolor, 
+      style = line.style_dashed, width = 1))
 
 if OB_bear and bear_channels>0
     if array.size(LineBearAvg) == bear_channels
@@ -97,9 +115,12 @@ if OB_bear and bear_channels>0
         line.delete(array.get(LineBearLow,0))
         array.remove(LineBearLow,0)
     
-    array.push(LineBearAvg,line.new(x1 = sync, xloc=xloc.bar_time, y1 = OB_bear_avg, x2 = sync[1], y2 = OB_bear_avg, extend = extend.left, color = bearcolor, style = line.style_solid, width = 1))
-    array.push(LineBearHigh,line.new(x1 = sync, xloc=xloc.bar_time, y1 = OB_bear_chigh, x2 = sync[1], y2 = OB_bear_chigh, extend = extend.left, color = bearcolor, style = line.style_dashed, width = 1))
-    array.push(LineBearLow,line.new(x1 = sync, xloc=xloc.bar_time, y1 = OB_bear_clow, x2 = sync[1], y2 = OB_bear_clow, extend = extend.left, color = bearcolor, style = line.style_dashed, width = 1))
+    array.push(LineBearAvg,line.new(x1 = sync, xloc=xloc.bar_time, y1 = OB_bear_avg, x2 = sync[1], y2 = OB_bear_avg, extend = extend.left, color = bearcolor, 
+      style = line.style_solid, width = 1))
+    array.push(LineBearHigh,line.new(x1 = sync, xloc=xloc.bar_time, y1 = OB_bear_chigh, x2 = sync[1], y2 = OB_bear_chigh, extend = extend.left, color = bearcolor, 
+      style = line.style_dashed, width = 1))
+    array.push(LineBearLow,line.new(x1 = sync, xloc=xloc.bar_time, y1 = OB_bear_clow, x2 = sync[1], y2 = OB_bear_clow, extend = extend.left, color = bearcolor, 
+      style = line.style_dashed, width = 1))
 
 
 // Alerts for Order Blocks Detection

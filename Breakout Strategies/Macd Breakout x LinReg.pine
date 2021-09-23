@@ -14,8 +14,12 @@ barInZone(_top, _bott, _index) => _index == 0 ? (high <= _top and high >= _bott 
   (high[_index] <= _top and high[_index] >= _bott ) or 
   ( low[_index] <= _top and low[_index] >= _bott) or (high[_index] >= _top and low[_index] <= _bott)
   
-znInZone(_top, _bott, _top2, _bott2) => (_top2 <= _top and _top2 >= _bott ) or ( _bott2 <= _top and _bott2 >= _bott) or (_top2 >= _top and _bott2 <= _bott)
+znInZone(_top, _bott, _top2, _bott2) => 
+    tp1 = max(_top, _bott),  bt1 = min(_top, _bott)
+    tp2 = max(_top2, _bott2),  bt2 = min(_top2, _bott2)
 
+    (tp2 <= tp1 and tp2 >= bt1 ) or ( bt2 <= tp1 and bt2 >= bt1) or (tp2 >= tp1 and bt2 <= bt1)
+    
 lineInZone(_top, _bott, _line) => (_line <= _top and _line >= _bott )
 
 priceInZone(_top, _bott, _price) => (_price <= _top and _price >= _bott )
@@ -30,7 +34,7 @@ sltotp(_ent, _sl, _rrr) =>
     
     tp
   
-getCoord(ln) => 
+getLineCoord(ln) => 
     x1 = line.get_x1(ln) 
     y1 = line.get_y1(ln) 
     x2 = line.get_x2(ln) 

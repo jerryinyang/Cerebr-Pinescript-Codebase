@@ -1,58 +1,84 @@
+// FVG ABOVE
+// {
+upHi = 0.0, upLo = 0.0
+var uline_mid = line(na), var uline_mid2 = line(na), var uline_mid3 = line(na), var u_delLine = line(na), var u_plotted = 0
+var uline_hi = line(na), var uline_hi2 = line(na), var uline_hi3 = line(na), var u_delHiLine = line(na)
+var uline_lo = line(na), var uline_lo2 = line(na), var uline_lo3 = line(na), var u_delLoLine = line(na)
 
-// © informanerd
-//@version=4
+upDataChange = change(upfvg_datasize)
+new_upFvg = not upboxReplaced ? upDataChange : upboxReplaced
 
-maxBoxes = 500
-study("HTF Candles", overlay = true, max_boxes_count = maxBoxes)
+if upfvg_datasize > 1 and new_upFvg 
+    openT = box.get_left(array.get(upfvgBox, upfvg_datasize - 1))
+    c_op = change(openT)
+    
+    if c_op
+        upHi := box.get_top(array.get(upfvgBox, upfvg_datasize - 1))
+        upLo := box.get_bottom(array.get(upfvgBox, upfvg_datasize - 1))
+        op = box.get_left(array.get(upfvgBox, upfvg_datasize - 1))
+        
+        half = (upHi + upLo) / 2
+        
+        if uline_mid == na
+            uline_mid := line.new(op, half, cl, half, xloc.bar_time, extend.none, color.lime)
+            uline_hi := line.new(op, upHi, cl, upHi, xloc.bar_time, extend.none, color.lime)
+            uline_lo := line.new(op, upLo, cl, upLo, xloc.bar_time, extend.none, color.lime)
+            u_plotted := u_plotted + 1
+            
+        else if uline_mid != na and u_plotted < plotFvgTop
+            if u_plotted == 1 and plotFvgTop > 1
+                uline_mid2 := uline_mid
+                uline_mid := line.new(op, half, cl, half, xloc.bar_time, extend.none, color.lime)
+                
+                uline_hi2 := uline_hi
+                uline_hi := line.new(op, upHi, cl, upHi, xloc.bar_time, extend.none, color.lime)
+                
+                uline_lo2 := uline_lo
+                uline_lo := line.new(op, upLo, cl, upLo, xloc.bar_time, extend.none, color.lime)
+                
+            if u_plotted == 2 and plotFvgTop > 2
+                uline_mid3 := uline_mid2
+                uline_mid2 := uline_mid
+                uline_mid := line.new(op, half, cl, half, xloc.bar_time, extend.none, color.lime)
+                
+                uline_hi3 := uline_hi2
+                uline_hi2 := uline_hi
+                uline_hi := line.new(op, upHi, cl, upHi, xloc.bar_time, extend.none, color.lime)
+                
+                uline_lo3 := uline_lo2
+                uline_lo2 := uline_lo
+                uline_lo := line.new(op, upLo, cl, upLo, xloc.bar_time, extend.none, color.lime)
+                
+            u_plotted := u_plotted + 1
+            
+        else if uline_mid != na and u_plotted == plotFvgTop
+        
+            u_delLine := uline_mid3
+            uline_mid3 := uline_mid2
+            uline_mid2 := uline_mid
+            uline_mid := line.new(op, half, cl, half, xloc.bar_time, extend.none, color.lime)
+            line.delete(u_delLine)
+            
+            u_delHiLine := uline_hi3
+            uline_hi3 := uline_hi2
+            uline_hi2 := uline_hi
+            uline_hi := line.new(op, upHi, cl, upHi, xloc.bar_time, extend.none, color.lime)
+            line.delete(u_delHiLine)
+            
+            u_delLoLine := uline_lo3
+            uline_lo3 := uline_lo2
+            uline_lo2 := uline_lo
+            uline_lo := line.new(op, upLo, cl, upLo, xloc.bar_time, extend.none, color.lime)
+            line.delete(u_delLoLine)
+            
+            u_plotted := u_plotted
+            
+    line.set_extend(uline_mid, extend.right)
+    line.set_extend(uline_mid2, extend.none)
+    line.set_extend(uline_mid3, extend.none)
 
-htf = input("", "Higher Time Frame", input.resolution)
-thickWick = input(false, "Thick Candle Wicks", group = "Candles Appearance")
-ascColor = input(color.green, "Bullish Color", group = "Candles Appearance")
-descColor = input(color.red, "Bearish Color", group = "Candles Appearance")
-bodyTrans = input(60, "Body Color Transparency", minval = 0, maxval = 100, step = 10, group = "Candles Appearance")
-wickTrans = input(80, "Wicks Color Transparency", minval = 0, maxval = 100, step = 10, group = "Candles Appearance")
+    line.set_color(uline_mid, plotFvgTop >= 1 ? color.lime : color(na))
+    line.set_color(uline_mid2, plotFvgTop >= 2 ? color.new(color.lime, 70) : color(na))
+    line.set_color(uline_mid3, plotFvgTop >= 3 ? color.new(color.lime, 40) : color(na))
 
-ctfCandleDeltaTime() =>
-    if timeframe.isseconds
-        timeframe.multiplier * 1000
-    else if timeframe.isminutes
-        timeframe.multiplier * 1000 * 60
-    else if timeframe.isdaily
-        timeframe.multiplier * 1000 * 60 * 1440
-    else if timeframe.isweekly
-        timeframe.multiplier * 1000 * 60 * 1440 * 7
-    else if timeframe.ismonthly
-        timeframe.multiplier * 1000 * 60 * 1440 * 30
-    else
-        0
-
-var bodies = array.new_box()
-var wicks = array.new_box()
-var color bodyColor = na
-var color wickColor = na
-
-htfO = security(syminfo.tickerid, htf, open)
-htfH = security(syminfo.tickerid, htf, high)
-htfL = security(syminfo.tickerid, htf, low)
-htfC = security(syminfo.tickerid, htf, close)
-htfOpenTime = security(syminfo.tickerid, htf, time)
-htfCloseTime = security(syminfo.tickerid, htf, time_close)
-
-if array.size(bodies) > 0 and htfOpenTime == htfOpenTime[1]
-    box.delete(array.pop(bodies))
-    box.delete(array.pop(wicks))
-if array.size(bodies) == maxBoxes / 2
-    box.delete(array.shift(bodies))
-    box.delete(array.shift(wicks))
-
-bodyTop = max(htfO, htfC)
-bodyBottom = min(htfO, htfC)
-wickLeft = htfOpenTime + ((htfCloseTime - htfOpenTime) / 2) - ctfCandleDeltaTime()
-wickRight = htfCloseTime - ((htfCloseTime - htfOpenTime) / 2) + (ctfCandleDeltaTime() / 2)
-bodyColor := htfO > htfC ? color.new(descColor, bodyTrans) : htfO < htfC ? color.new(ascColor, bodyTrans) : bodyColor
-wickColor := htfO > htfC ? color.new(descColor, wickTrans) : htfO < htfC ? color.new(ascColor, wickTrans) : wickColor
-
-array.push(bodies, box.new(htfOpenTime, bodyTop, htfCloseTime, bodyBottom, bodyTop == bodyBottom ? bodyColor : na, xloc = xloc.bar_time, bgcolor = bodyColor))
-array.push(wicks, box.new(thickWick ? htfOpenTime : wickLeft, htfH, thickWick ? htfCloseTime : wickRight, htfL, na, xloc = xloc.bar_time, bgcolor = wickColor))
-
-
+// }
