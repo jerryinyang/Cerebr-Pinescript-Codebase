@@ -1,0 +1,329 @@
+//@version=4
+strategy("Diego's Strategy", overlay=true, pyramiding=1, default_qty_value=10)
+
+
+// PARAMETERS 
+// {
+
+devTooltip = "Deviation is a multiplier that affects how much the price should deviate from the previous pivot in order for the bar to become a new pivot."
+depthTooltip = "The minimum number of bars that will be taken into account when calculating the indicator."
+// pivots threshold
+threshold_multiplier = input(title="Deviation", type=input.float, defval=3, minval=0, tooltip=devTooltip)
+dev_threshold = atr(10) / close * 100 * threshold_multiplier
+depth = input(title="Depth", type=input.integer, defval=10, minval=1, tooltip=depthTooltip)
+
+
+var extendRight = input(true, "Extend Right")
+var extending = extend.none
+if extendRight
+    extending := extend.right
+
+levels = input(true, "Show Levels", inline = "Levels")
+levelsFormat = input("Percent", "", options = ["Values", "Percent"], inline = "Levels")
+labelsPosition = input("Left", "Labels Position", options = ["Left", "Right"])
+
+var line lineLast = na
+var int iLast = 0
+var int iPrev = 0
+var float pLast = 0
+var isHighLast = false // otherwise the last pivot is a low pivot
+
+// }
+
+// FUNCTIONS
+// {
+
+pivots(src, length, isHigh) =>
+    l2 = length * 2
+    c = nz(src[length])
+    ok = true
+    for i = 0 to l2
+        if isHigh and src[i] > c
+            ok := false
+
+        if not isHigh and src[i] < c
+            ok := false
+    if ok
+        [bar_index[length], c]
+    else
+        [int(na), float(na)]
+[iH, pH] = pivots(high, depth / 2, true)
+[iL, pL] = pivots(low, depth / 2, false)
+
+calc_dev(base_price, price) =>
+    100 * (price - base_price) / price
+
+pivotFound(dev, isHigh, index, price) =>
+    if isHighLast == isHigh and not na(lineLast)
+        // same direction
+        if isHighLast ? price > pLast : price < pLast
+            line.set_xy2(lineLast, index, price)
+            [lineLast, isHighLast]
+        else
+            [line(na), bool(na)]
+    else // reverse the direction (or create the very first line)
+        if abs(dev) > dev_threshold
+            // price move is significant
+            id = line.new(iLast, pLast, index, price, color=color.gray, width=1, style=line.style_dashed)
+            [id, isHigh]
+        else
+            [line(na), bool(na)]
+
+if not na(iH)
+    dev = calc_dev(pLast, pH)
+    [id, isHigh] = pivotFound(dev, true, iH, pH)
+    if not na(id)
+        if id != lineLast
+            line.delete(lineLast)
+        lineLast := id
+        isHighLast := isHigh
+        iPrev := iLast
+        iLast := iH
+        pLast := pH
+else
+    if not na(iL)
+        dev = calc_dev(pLast, pL)
+        [id, isHigh] = pivotFound(dev, false, iL, pL)
+        if not na(id)
+            if id != lineLast
+                line.delete(lineLast)
+            lineLast := id
+            isHighLast := isHigh
+            iPrev := iLast
+            iLast := iL
+            pLast := pL
+
+_draw_line(price, col) =>
+    var id = line.new(iLast, price, bar_index, price, color=col, width=1, extend=extending)
+    if not na(lineLast)
+        line.set_xy1(id, line.get_x1(lineLast), price)
+        line.set_xy2(id, line.get_x2(lineLast), price)
+    id
+
+_draw_label(price, txt, txtColor) =>
+    x = labelsPosition == "Left" ? line.get_x1(lineLast) : not extendRight ? line.get_x2(lineLast) : bar_index
+    labelStyle = labelsPosition == "Left" ? label.style_label_right : label.style_label_left
+    align = labelsPosition == "Left" ? text.align_right : text.align_left
+    labelsAlignStrLeft = txt + '\n ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏ \n'
+    labelsAlignStrRight = '       ' + txt + '\n ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏ \n'
+    labelsAlignStr = labelsPosition == "Left" ? labelsAlignStrLeft : labelsAlignStrRight
+    var id = label.new(x=x, y=price, text=labelsAlignStr, textcolor=txtColor, style=labelStyle, textalign=align, color=#00000000)
+    label.set_xy(id, x, price)
+    label.set_text(id, labelsAlignStr)
+    label.set_textcolor(id, txtColor)
+
+_label_txt(level, price) =>
+    l = levelsFormat == "Values" ? tostring(level) : tostring(level * 100) + "%"
+    (levels ? l : "")
+
+_crossing_level(sr, r) =>
+    (r > sr and r < sr[1]) or (r < sr and r > sr[1])
+
+// }
+
+// PIVOT POINTS 
+// {
+rev = false
+startPrice = rev ? line.get_y1(lineLast) : pLast
+endPrice = rev ? pLast : line.get_y1(lineLast)
+
+iHL = startPrice > endPrice
+diff = (iHL ? -1 : 1) * abs(startPrice - endPrice)
+// }
+
+// FIBONACCI SETTINGS
+// {
+showFib = input(true, "Show Fibonacci Levels?", input.bool, group="FIB LEVELS SETTING")
+showFib2 = input(false, "Show Second Fibonacci Levels?", input.bool, group="FIB LEVELS SETTING")
+fibColor = input(color.purple, "Fibonacci Level Color", input.color, group="FIB LEVELS SETTING")
+fib2Color = input(color.olive, "Fibonacci 2 Level Color", input.color, group="FIB LEVELS SETTING")
+
+processLevel(value) =>
+    float m = value
+    col = showFib ? fibColor : na
+    
+    newLine = line(na)
+    r = startPrice + diff * m
+    newLine := _draw_line(r, col)
+    _draw_label(r, _label_txt(m, r), col)
+    
+    newLine
+
+processRevLevel(value) =>
+    float m = value
+    col = showFib2 ? fibColor : na
+    
+    newLine = line(na)
+    r = endPrice + (-1 * diff) * m 
+    newLine := _draw_line(r, col)
+    _draw_label(r, _label_txt(m, r), col)
+    
+    newLine  
+
+// }
+
+// DRAW FIBONACCI LEVELS
+// {
+
+value_0 = 0
+value_0_236 = 0.236
+value_0_382 = 0.382
+value_0_5 = 0.5
+value_0_618 = 0.618
+value_0_65 = 0.65
+value_0_786 = 0.786
+value_1 = 1
+value_1_272 = 1.272
+value_1_414 = 1.414
+value_1_618 = 1.618
+value_1_65 = 1.65
+value_2_618 = 2.618
+
+
+line_0 = processLevel(value_0)          ,   price_0 = line.get_y1(line_0)
+line_0_236 = processLevel(value_0_236)  ,   price_0_236 = line.get_y1(line_0_236)
+line_0_382 = processLevel(value_0_382)  ,   price_0_382 = line.get_y1(line_0_382)
+line_0_5 = processLevel(value_0_5)      ,   price_0_5 = line.get_y1(line_0_5)
+line_0_618 = processLevel(value_0_618)  ,   price_0_618 = line.get_y1(line_0_618)
+line_0_65 = processLevel(value_0_65)    ,   price_0_65 = line.get_y1(line_0_65)
+line_0_786 = processLevel(value_0_786)  ,   price_0_786 = line.get_y1(line_0_786)
+line_1 = processLevel(value_1)          ,   price_1 = line.get_y1(line_1)
+line_1_272 = processLevel(value_1_272)  ,   price_1_272 = line.get_y1(line_1_272)
+line_1_414 = processLevel(value_1_414)  ,   price_1_414 = line.get_y1(line_1_414)
+line_1_618 = processLevel(value_1_618)  ,   price_1_618 = line.get_y1(line_1_618)
+line_1_65 = processLevel(value_1_65)    ,   price_1_65 = line.get_y1(line_1_65)
+line_2_618 = processLevel(value_2_618)  ,   price_2_618 = line.get_y1(line_2_618)
+
+
+fib2_line_0 = processRevLevel(value_0)          ,   fib2_price_0 = line.get_y1(fib2_line_0)
+fib2_line_0_236 = processRevLevel(value_0_236)  ,   fib2_price_0_236 = line.get_y1(fib2_line_0_236)
+fib2_line_0_382 = processRevLevel(value_0_382)  ,   fib2_price_0_382 = line.get_y1(fib2_line_0_382)
+fib2_line_0_5 = processRevLevel(value_0_5)      ,   fib2_price_0_5 = line.get_y1(fib2_line_0_5)
+fib2_line_0_618 = processRevLevel(value_0_618)  ,   fib2_price_0_618 = line.get_y1(fib2_line_0_618)
+fib2_line_0_65 = processRevLevel(value_0_65)    ,   fib2_price_0_65 = line.get_y1(fib2_line_0_65)
+fib2_line_0_786 = processRevLevel(value_0_786)  ,   fib2_price_0_786 = line.get_y1(fib2_line_0_786)
+fib2_line_1 = processRevLevel(value_1)          ,   fib2_price_1 = line.get_y1(fib2_line_1)
+fib2_line_1_272 = processRevLevel(value_1_272)  ,   fib2_price_1_272 = line.get_y1(fib2_line_1_272)
+fib2_line_1_414 = processRevLevel(value_1_414)  ,   fib2_price_1_414 = line.get_y1(fib2_line_1_414)
+fib2_line_1_618 = processRevLevel(value_1_618)  ,   fib2_price_1_618 = line.get_y1(fib2_line_1_618)
+fib2_line_1_65 = processRevLevel(value_1_65)    ,   fib2_price_1_65 = line.get_y1(fib2_line_1_65)
+fib2_line_2_618 = processRevLevel(value_2_618)  ,   fib2_price_2_618 = line.get_y1(fib2_line_2_618)
+
+// }
+
+// FILTERS
+// {
+useEmaFilt = input(true, "Use EMA Filter?", input.bool, group="FILTERS")
+emaLen = input(200, "EMA Length", input.integer, group="FILTERS")
+emaRes = input("", "EMA Timeframe", input.resolution, group="FILTERS")
+showEma = input(false, "Display EMA?", input.bool, group="FILTERS")
+
+ema = security(syminfo.tickerid, emaRes, ema(close, emaLen), barmerge.gaps_off, barmerge.lookahead_off)
+
+emaCol = showEma ? color.white : na
+plot(ema, "FIlter EMA", emaCol, 2, plot.style_line)
+
+emaLong = useEmaFilt ? close > ema : 1
+emaShort = useEmaFilt ? close < ema : 1
+// }
+
+//*************** TRADING SESSIONS ***************//
+//{
+
+useSess = input(true, "Filter Trade by Session?", group = "TRADE SESSION")
+whatSess = input("Custom", "What Trading Session? ", options = ["Custom", "Sydney", "Tokyo", "London", "New York"], group = "TRADE SESSION")
+sessCust  = input("0500-1600", "Custom Session", input.session, group = "TRADE SESSION")
+
+// InSession() determines if a price bar falls inside the specified session
+InSession(sess) => na(time(timeframe.period, sess)) == false
+
+sessSyd = "2200-0700"
+sessTok = "0000-0900"
+sessLon = "0800-1700"
+sessNY = "1300-2200"
+
+sess = whatSess == "Custom" ? (sessCust) : 
+  (whatSess == "Sydney" ? (sessSyd) : 
+  (whatSess == "Tokyo" ? (sessTok) : 
+  (whatSess == "New York" ? (sessNY) : 
+  (na)  ) ) )  
+  
+inSession = InSession(sess) //returns true if current bar is within desired session
+
+bgcolor(inSession ? color.purple : na)
+//}
+//SIGNAL ==> inSession
+
+//********** STRATEGY EXECUTION **********//
+// {
+newFib = change(price_0)
+
+fibZone = input("38% - 50%", "Fibonacci Levels for Entry Zone", options=["23.6% - 38%", "38% - 50%", "50% - 61.8%"], 
+  tooltip="What two levels would be used to detect breakout?", group="STRATEGY SETTINGS")
+tradeFibDir = input(true, "Trade In Fibonacci Overall Direction?", input.bool, group="STRATEGY SETTINGS")
+entryFib = input("Fib 1", "Fibonacci for Entry", options=["Fib 1", "Fib 2"])
+
+priceInZone(_top, _bott, _price) => (_price <= max(_top, _bott) and _price >= min(_top, _bott) )
+
+
+// FOR FIBONACCI 1 {
+
+fibDir = iHL ? "dn" : "up"
+fibZnTop = fibZone == "38% - 50%" ? max(price_0_382, price_0_5) :  fibZone == "23.6% - 38%" ? max(price_0_236, price_0_382) : max(price_0_5, price_0_618)
+fibZnBott = fibZone == "38% - 50%" ? min(price_0_382, price_0_5) :  fibZone == "23.6% - 38%" ? min(price_0_236, price_0_382) : min(price_0_5, price_0_618)
+
+priceBreakoutLong = priceInZone(fibZnTop, fibZnBott, close[2]) and not (priceInZone(fibZnTop, fibZnBott, close[1])) and close[1] > fibZnTop
+priceBreakoutShort = priceInZone(fibZnTop, fibZnBott, close[2]) and not (priceInZone(fibZnTop, fibZnBott, close[1])) and close[1] < fibZnBott
+
+fib1GoLong = tradeFibDir ? (fibDir == "up" and priceBreakoutLong) : (priceBreakoutLong)
+fib1GoShort = tradeFibDir ? (fibDir == "dn" and priceBreakoutShort) : (priceBreakoutShort)
+
+ // }
+ 
+// FOR FIBONACCI 2 {
+
+fib2ZnTop = fibZone == "38% - 50%" ? max(fib2_price_0_382, price_0_5) : max(fib2_price_0_5, price_0_618)
+fib2ZnBott = fibZone == "38% - 50%" ? min(fib2_price_0_382, price_0_5) : min(fib2_price_0_5, price_0_618)
+
+price2BreakoutLong = priceInZone(fib2ZnTop, fib2ZnBott, close[2]) and not (priceInZone(fib2ZnTop, fib2ZnBott, close[1])) and close[1] > fib2ZnTop
+price2BreakoutShort = priceInZone(fib2ZnTop, fib2ZnBott, close[2]) and not (priceInZone(fib2ZnTop, fib2ZnBott, close[1])) and close[1] < fib2ZnBott
+
+fib2GoLong = tradeFibDir ? (fibDir == "up" and price2BreakoutLong) : (price2BreakoutLong)
+fib2GoShort = tradeFibDir ? (fibDir == "dn" and price2BreakoutShort) : (price2BreakoutShort)
+
+// }
+ 
+// ENTRIES {
+goLong = entryFib == "Fib 1" ? fib1GoLong and emaLong and inSession : fib2GoLong and emaLong and inSession
+goShort = entryFib == "Fib 1" ? fib1GoShort and emaShort and inSession : fib2GoShort and emaShort and inSession
+// }
+
+// EXITS {
+
+tpLevel = input("100%", "Stop Loss Fibonacci Level", options=["100%", "127.2%", "141.4%", "161.8%"])
+slLevel = input("23.6%", "Take Profit Fibonacci Level", options=["23.6%", "0%"])
+
+var SL = float(na)
+var TP = float(na)
+
+if fib1GoLong or fib1GoShort
+    SL := slLevel == "23.6%" ? price_0_236 : price_0
+    TP := tpLevel == "100%" ? price_1 : tpLevel == "127.2%" ? price_1_272 : 
+      tpLevel == "141.4%" ? price_1_414 : tpLevel == "161.8%" ? price_1_618 : na
+
+else if fib2GoLong or fib2GoShort
+    SL := slLevel == "23.6%" ? fib2_price_0_236 : price_0
+    TP := tpLevel == "100%" ? fib2_price_1 : tpLevel == "127.2%" ? 
+      fib2_price_1_272 : tpLevel == "141.4%" ? fib2_price_1_414 : tpLevel == "161.8%" ? fib2_price_1_618 : na
+
+//}
+
+if (goLong)
+    strategy.entry("Long", strategy.long)
+    strategy.exit("Exit Long", "Long",  limit=TP, stop=SL)
+
+if (goShort)
+    strategy.entry("Short", strategy.short)
+    strategy.exit("Exit Short", "Short",  limit=TP, stop=SL)
+    
+// }

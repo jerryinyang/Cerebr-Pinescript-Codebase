@@ -1,0 +1,381 @@
+//@version=4
+
+maxBoxes = 500, maxFvg = 500
+study("MTF ORDER BLOCK AND IMBALANCE", shorttitle="MTF O.B and FVG", overlay=true, max_boxes_count = maxBoxes)
+
+// PARAMETERS
+// {
+
+znInZone(_top, _bott, _top2, _bott2) => 
+    tp1 = max(_top, _bott),  bt1 = min(_top, _bott)
+    tp2 = max(_top2, _bott2),  bt2 = min(_top2, _bott2)
+
+    (tp2 <= tp1 and tp2 >= bt1 ) or ( bt2 <= tp1 and bt2 >= bt1) or (tp2 >= tp1 and bt2 <= bt1)
+
+htf = input("", "Higher Time Frame", input.resolution)
+ascColor = color(na), descColor = color(na)
+bodyTrans = 100, wickTrans = 100
+
+plotFvgTop = input(2, "FVG Blocks Above?", input.integer, minval=1, maxval=3)
+plotFvgBott = input(2, "FVG Blocks Below?", input.integer, minval=1, maxval=3)
+// }
+
+cl = time_close(htf)
+
+// HTF CANDLES CALCULATION AND PLOTTING
+// {
+ctfCandleDeltaTime() =>
+    if timeframe.isseconds
+        timeframe.multiplier * 1000
+    else if timeframe.isminutes
+        timeframe.multiplier * 1000 * 60
+    else if timeframe.isdaily
+        timeframe.multiplier * 1000 * 60 * 1440
+    else if timeframe.isweekly
+        timeframe.multiplier * 1000 * 60 * 1440 * 7
+    else if timeframe.ismonthly
+        timeframe.multiplier * 1000 * 60 * 1440 * 30
+    else
+        0
+
+var bodies = array.new_box()
+var wicks = array.new_box()
+var color bodyColor = color(na)
+var color wickColor = color(na)
+
+htfO = security(syminfo.tickerid, htf, open)
+htfH = security(syminfo.tickerid, htf, high)
+htfL = security(syminfo.tickerid, htf, low)
+htfC = security(syminfo.tickerid, htf, close)
+htfOpenTime = security(syminfo.tickerid, htf, time)
+htfCloseTime = security(syminfo.tickerid, htf, time_close)
+
+if array.size(bodies) > 0 and htfOpenTime == htfOpenTime[1]
+    box.delete(array.pop(bodies))
+    box.delete(array.pop(wicks))
+if array.size(bodies) == maxBoxes / 2
+    box.delete(array.shift(bodies))
+    box.delete(array.shift(wicks))
+
+bodyTop = max(htfO, htfC)
+bodyBottom = min(htfO, htfC)
+wickLeft = htfOpenTime + ((htfCloseTime - htfOpenTime) / 2) - ctfCandleDeltaTime()
+wickRight = htfCloseTime - ((htfCloseTime - htfOpenTime) / 2) + (ctfCandleDeltaTime() / 2)
+bodyColor := htfO > htfC ? color.new(descColor, bodyTrans) : htfO < htfC ? color.new(ascColor, bodyTrans) : bodyColor
+wickColor := htfO > htfC ? color.new(descColor, wickTrans) : htfO < htfC ? color.new(ascColor, wickTrans) : wickColor
+// }
+
+// ARRAY FILLING
+// {
+array.push(bodies, box.new(htfOpenTime, bodyTop, htfCloseTime, bodyBottom, bodyTop == bodyBottom ? bodyColor : color(na), xloc = xloc.bar_time, bgcolor = bodyColor))
+array.push(wicks, box.new(htfOpenTime, htfH, htfCloseTime , htfL, color(na), xloc = xloc.bar_time, bgcolor = wickColor))
+// }
+
+// SCAN FOR FVG FROM BOX ARRAY
+// {
+w_datasize = array.size(wicks)
+
+var upfvgBox = array.new_box()
+var dnfvgBox = array.new_box()
+
+upboxReplaced = false, dnboxReplaced = false
+// FUNCTION TO CALCULATE IMBALANCES
+// {
+
+boxInx = w_datasize - 1
+box1 = box(na), box3 = box(na)
+
+if boxInx - 3 >= 0
+    box1 := array.get(wicks, boxInx - 1)
+    box3 := array.get(wicks, boxInx - 3)
+
+hi1 = box.get_top(box1) , lo1 = box.get_bottom(box1)
+hi3 = box.get_top(box3) , lo3 = box.get_bottom(box3)
+op3 = box.get_left(box3), cl1 = box.get_right(box1)
+
+fvg = "none"
+if lo3 > hi1
+    fvg := "above"
+else if hi3 < lo1
+    fvg := "below"
+    
+new_fvg = box(na)
+
+if fvg == "above"
+    // PLOT THE FVG BLOCK
+    new_fvg := box.new(op3, lo3, cl1 , hi1, color(na), xloc = xloc.bar_time, bgcolor = color(na))
+    
+    if array.size(upfvgBox) < maxBoxes / 2
+        array.push(upfvgBox, new_fvg) 
+    else if array.size(upfvgBox) == maxBoxes / 2
+        box.delete(array.shift(upfvgBox))
+        upboxReplaced := true
+        array.push(upfvgBox, new_fvg)
+
+else if fvg == "below"
+    // PLOT THE FVG BLOCK
+    new_fvg := box.new(op3, hi3, cl1 , lo1, color(na), xloc = xloc.bar_time, bgcolor =  color(na))
+    
+    if array.size(dnfvgBox) < maxBoxes / 2
+        array.push(dnfvgBox, new_fvg)
+        
+    else if array.size(dnfvgBox) == maxBoxes / 2
+        box.delete(array.shift(dnfvgBox))
+        dnboxReplaced := true
+        array.push(dnfvgBox, new_fvg)
+
+// }
+
+// }
+
+// PLOT IMBALANCES
+// {
+
+// PARAMETERS
+// {
+plotFvgBlock = input(false, "Plot FVG Block?", input.bool, inline = "plot fvg")
+plotFvgNo = input(1, "", input.integer, minval=0, maxval=3, inline = "plot fvg")
+
+upfvg_datasize = array.size(upfvgBox)
+dnfvg_datasize = array.size(dnfvgBox)
+// }
+
+// GET BOX DATA
+// {
+getCoord(boxarr, datasize, inx) =>
+    gcHi = box.get_top(array.get(boxarr, datasize - inx))
+    gcLo = box.get_bottom(array.get(boxarr, datasize - inx))
+    gcOp = box.get_left(array.get(boxarr, datasize - inx))
+
+    [gcHi, gcLo, gcOp]
+// }
+
+// FVG ABOVE
+// {
+var uline_mid = line(na), var uline_mid2 = line(na), var uline_mid3 = line(na), var u_delLine = line(na), var u_plotted = 0
+var uline_hi = line(na), var uline_hi2 = line(na), var uline_hi3 = line(na), var u_delHiLine = line(na)
+var uline_lo = line(na), var uline_lo2 = line(na), var uline_lo3 = line(na), var u_delLoLine = line(na)
+
+upDataChange = change(upfvg_datasize)
+new_upFvg = not upboxReplaced ? upDataChange : upboxReplaced
+
+// CONDITION
+// {
+if upfvg_datasize > 1 and new_upFvg 
+    openT = box.get_left(array.get(upfvgBox, upfvg_datasize - 1))
+    c_op = change(openT)
+    
+    if c_op
+        
+        [upHi, upLo, op] = getCoord(upfvgBox, upfvg_datasize, 1)
+        [pre_upHi, pre_upLo, pre_op] = getCoord(upfvgBox, upfvg_datasize, 2)
+        
+        // IF THE NEW ZONE (BOX) IS NOT WITHIN PREVIOUS PLOTTED BOXES
+        fvgInPrev = znInZone(upHi, upLo, pre_upHi, pre_upLo)
+        
+        if not(fvgInPrev)
+        
+            half = (upHi + upLo) / 2
+            
+            if uline_mid == na
+                uline_mid := line.new(op, half, cl, half, xloc.bar_time, extend.none, color.lime)
+                uline_hi := line.new(op, upHi, cl, upHi, xloc.bar_time, extend.none, color.lime)
+                uline_lo := line.new(op, upLo, cl, upLo, xloc.bar_time, extend.none, color.lime)
+                u_plotted := u_plotted + 1
+                
+            else if uline_mid != na and u_plotted < plotFvgTop
+                if u_plotted == 1 and plotFvgTop > 1
+                    uline_mid2 := uline_mid
+                    uline_mid := line.new(op, half, cl, half, xloc.bar_time, extend.none, color.lime)
+                    
+                    uline_hi2 := uline_hi
+                    uline_hi := line.new(op, upHi, cl, upHi, xloc.bar_time, extend.none, color.lime)
+                    
+                    uline_lo2 := uline_lo
+                    uline_lo := line.new(op, upLo, cl, upLo, xloc.bar_time, extend.none, color.lime)
+                    
+                if u_plotted == 2 and plotFvgTop > 2
+                    uline_mid3 := uline_mid2
+                    uline_mid2 := uline_mid
+                    uline_mid := line.new(op, half, cl, half, xloc.bar_time, extend.none, color.lime)
+                    
+                    uline_hi3 := uline_hi2
+                    uline_hi2 := uline_hi
+                    uline_hi := line.new(op, upHi, cl, upHi, xloc.bar_time, extend.none, color.lime)
+                    
+                    uline_lo3 := uline_lo2
+                    uline_lo2 := uline_lo
+                    uline_lo := line.new(op, upLo, cl, upLo, xloc.bar_time, extend.none, color.lime)
+                    
+                u_plotted := u_plotted + 1
+                
+            else if uline_mid != na and u_plotted == plotFvgTop
+            
+                u_delLine := uline_mid3
+                uline_mid3 := uline_mid2
+                uline_mid2 := uline_mid
+                uline_mid := line.new(op, half, cl, half, xloc.bar_time, extend.none, color.lime)
+                line.delete(u_delLine)
+                
+                u_delHiLine := uline_hi3
+                uline_hi3 := uline_hi2
+                uline_hi2 := uline_hi
+                uline_hi := line.new(op, upHi, cl, upHi, xloc.bar_time, extend.none, color.lime)
+                line.delete(u_delHiLine)
+                
+                u_delLoLine := uline_lo3
+                uline_lo3 := uline_lo2
+                uline_lo2 := uline_lo
+                uline_lo := line.new(op, upLo, cl, upLo, xloc.bar_time, extend.none, color.lime)
+                line.delete(u_delLoLine)
+                
+                u_plotted := u_plotted
+// }  
+
+    // LINE STYLING
+    // {
+    line.set_extend(uline_mid, extend.right)
+    line.set_extend(uline_mid2, extend.none)
+    line.set_extend(uline_mid3, extend.none)
+    
+    line.set_extend(uline_hi, extend.right)
+    line.set_extend(uline_hi2, extend.none)
+    line.set_extend(uline_hi3, extend.none)
+    
+    line.set_extend(uline_lo, extend.right)
+    line.set_extend(uline_lo2, extend.none)
+    line.set_extend(uline_lo3, extend.none)
+
+    line.set_color(uline_mid, plotFvgTop >= 1 ? color.white : color(na))
+    line.set_color(uline_mid2, plotFvgTop >= 2 ? color.new(color.white, 70) : color(na))
+    line.set_color(uline_mid3, plotFvgTop >= 3 ? color.new(color.white, 40) : color(na))
+    
+    line.set_color(uline_hi, plotFvgTop >= 1 ? color.lime : color(na))
+    line.set_color(uline_hi2, plotFvgTop >= 2 ? color.new(color.lime, 70) : color(na))
+    line.set_color(uline_hi3, plotFvgTop >= 3 ? color.new(color.lime, 40) : color(na))
+    
+    line.set_color(uline_lo, plotFvgTop >= 1 ? color.lime : color(na))
+    line.set_color(uline_lo2, plotFvgTop >= 2 ? color.new(color.lime, 70) : color(na))
+    line.set_color(uline_lo3, plotFvgTop >= 3 ? color.new(color.lime, 40) : color(na))
+    // }
+
+// }
+
+// FVG BELOW
+// {
+var dline_mid = line(na), var dline_mid2 = line(na), var dline_mid3 = line(na), var d_delLine = line(na), var d_plotted = 0
+var dline_hi = line(na), var dline_hi2 = line(na), var dline_hi3 = line(na), var d_delHiLine = line(na)
+var dline_lo = line(na), var dline_lo2 = line(na), var dline_lo3 = line(na), var d_delLoLine = line(na)
+
+dnDataChange = change(dnfvg_datasize)
+new_dnFvg = not dnboxReplaced ? dnDataChange : dnboxReplaced
+
+// CONDITION
+// {
+if dnfvg_datasize > 0 and new_dnFvg 
+    openT = box.get_left(array.get(dnfvgBox, dnfvg_datasize - 1))
+    c_op = change(openT)
+    
+    if c_op
+    
+        
+        [dnHi, dnLo, op] = getCoord(dnfvgBox, dnfvg_datasize, 1)
+        [pre_dnHi, pre_dnLo, pre_op] = getCoord(dnfvgBox, dnfvg_datasize, 2)
+        
+        // IF THE NEW ZONE (BOX) IS NOT WITHIN PREVIOUS PLOTTED BOXES
+        fvgInPrev = znInZone(dnHi, dnLo, pre_dnHi, pre_dnLo)
+        
+        if not(fvgInPrev)
+
+        
+            half = (dnHi + dnLo) / 2
+            
+            if dline_mid == na
+                dline_mid := line.new(op, half, cl, half, xloc.bar_time, extend.none, color.maroon)
+                dline_hi := line.new(op, dnHi, cl, dnHi, xloc.bar_time, extend.none, color.maroon)
+                dline_lo := line.new(op, dnLo, cl, dnLo, xloc.bar_time, extend.none, color.maroon)
+                d_plotted := d_plotted + 1
+                
+            else if dline_mid != na and d_plotted < plotFvgBott
+                if d_plotted == 1 and plotFvgBott > 1
+                    dline_mid2 := dline_mid
+                    dline_mid := line.new(op, half, cl, half, xloc.bar_time, extend.none, color.maroon)
+                    
+                    dline_hi2 := dline_hi
+                    dline_hi := line.new(op, dnHi, cl, dnHi, xloc.bar_time, extend.none, color.maroon)
+                    
+                    dline_lo2 := dline_lo
+                    dline_lo := line.new(op, dnLo, cl, dnLo, xloc.bar_time, extend.none, color.maroon)
+                    
+                if d_plotted == 2 and plotFvgBott > 2
+                    dline_mid3 := dline_mid2
+                    dline_mid2 := dline_mid
+                    dline_mid := line.new(op, half, cl, half, xloc.bar_time, extend.none, color.maroon)
+                    
+                    dline_hi3 := dline_hi2
+                    dline_hi2 := dline_hi
+                    dline_hi := line.new(op, dnHi, cl, dnHi, xloc.bar_time, extend.none, color.maroon)
+                    
+                    dline_lo3 := dline_lo2
+                    dline_lo2 := dline_lo
+                    dline_lo := line.new(op, dnLo, cl, dnLo, xloc.bar_time, extend.none, color.maroon)
+                    
+                d_plotted := d_plotted + 1
+                
+            else if dline_mid != na and d_plotted == plotFvgBott
+            
+                d_delLine := dline_mid3
+                dline_mid3 := dline_mid2
+                dline_mid2 := dline_mid
+                dline_mid := line.new(op, half, cl, half, xloc.bar_time, extend.none, color.maroon)
+                line.delete(d_delLine)
+                
+                d_delHiLine := dline_hi3
+                dline_hi3 := dline_hi2
+                dline_hi2 := dline_hi
+                dline_hi := line.new(op, dnHi, cl, dnHi, xloc.bar_time, extend.none, color.maroon)
+                line.delete(d_delHiLine)
+                
+                d_delLoLine := dline_lo3
+                dline_lo3 := dline_lo2
+                dline_lo2 := dline_lo
+                dline_lo := line.new(op, dnLo, cl, dnLo, xloc.bar_time, extend.none, color.maroon)
+                line.delete(d_delLoLine)
+                
+                d_plotted := d_plotted
+// }
+
+    // LINE STYLING
+    // {
+    line.set_extend(dline_mid, extend.right)
+    line.set_extend(dline_mid2, extend.none)
+    line.set_extend(dline_mid3, extend.none)
+    
+    line.set_extend(dline_hi, extend.right)
+    line.set_extend(dline_hi2, extend.none)
+    line.set_extend(dline_hi3, extend.none)
+    
+    line.set_extend(dline_lo, extend.right)
+    line.set_extend(dline_lo2, extend.none)
+    line.set_extend(dline_lo3, extend.none)
+
+    line.set_color(dline_mid, plotFvgBott >= 1 ? color.white : color(na))
+    line.set_color(dline_mid2, plotFvgBott >= 2 ? color.new(color.white, 70) : color(na))
+    line.set_color(dline_mid3, plotFvgBott >= 3 ? color.new(color.white, 40) : color(na))
+    
+    line.set_color(dline_hi, plotFvgBott >= 1 ? color.maroon : color(na))
+    line.set_color(dline_hi2, plotFvgBott >= 2 ? color.new(color.maroon, 70) : color(na))
+    line.set_color(dline_hi3, plotFvgBott >= 3 ? color.new(color.maroon, 40) : color(na))
+    
+    line.set_color(dline_lo, plotFvgBott >= 1 ? color.maroon : color(na))
+    line.set_color(dline_lo2, plotFvgBott >= 2 ? color.new(color.maroon, 70) : color(na))
+    line.set_color(dline_lo3, plotFvgBott >= 3 ? color.new(color.maroon, 40) : color(na))
+    // }
+// }
+
+// }
+
+// DELETE FVG BLOCK WHEN IT IS CROSSED
+// {
+
+// }

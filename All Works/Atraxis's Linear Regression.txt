@@ -1,0 +1,224 @@
+//@version=4
+study("Atraxis' Linear Regression", overlay=1)
+
+// FUNTIONS
+// {
+htf(_res, _exp, gaps_on)  => gaps_on == 0 ? security(syminfo.tickerid, _res, _exp) :
+  gaps_on == true ? security(syminfo.tickerid, _res, _exp, barmerge.gaps_on, barmerge.lookahead_off ) : 
+  security(syminfo.tickerid, _res, _exp, barmerge.gaps_off, barmerge.lookahead_off )
+  
+barInZone(_top, _bott, _index) => _index == 0 ? (high <= _top and high >= _bott ) or 
+  ( low <= _top and low >= _bott) or (high >= _top and low <= _bott) : 
+  (high[_index] <= _top and high[_index] >= _bott ) or 
+  ( low[_index] <= _top and low[_index] >= _bott) or (high[_index] >= _top and low[_index] <= _bott)
+  
+znInZone(_top, _bott, _top2, _bott2) => (_top2 <= _top and _top2 >= _bott ) or ( _bott2 <= _top and _bott2 >= _bott) or (_top2 >= _top and _bott2 <= _bott)
+
+priceInZone(_top, _bott, _price) => (_price <= _top and _price >= _bott )
+
+barInTradeZone(_top, _bott, _index) => _index == 0 ? (high < _top and high > _bott ) and ( low < _top and low > _bott)  :
+  (high[_index] < _top and high[_index] > _bott ) and ( low[_index] < _top and low[_index] > _bott)
+  
+getCoord(ln) => 
+    x1 = line.get_x1(ln) 
+    y1 = line.get_y1(ln) 
+    x2 = line.get_x2(ln) 
+    y2 = line.get_y2(ln) 
+    
+    ln_slope = (y2 - y1) / (x2 - x1)
+    
+    [x1, y1, x2, y2, ln_slope]
+
+  
+//Period Converter Function
+//{
+resToInt(_res) =>
+    resInt = 0
+    if _res == "D"
+        resInt := 1440
+    else if _res == "W"
+        resInt := 10080
+    else if _res == "M"
+        resInt := 43200
+    else
+        resInt := round(tonumber(_res))
+    
+    resInt
+
+periodConv(_len, _res) =>
+    tf = round(tonumber(timeframe.period))
+    htfi = resToInt(_res)
+    
+    len = tf < htfi ? ((htfi * _len) / tf) : na
+    
+    len
+//}
+// }
+
+
+// INPUTS
+// {
+
+// FILTERS
+i_chann1Len = input(50, "Channel Length", input.integer, minval=1, group="LINEAR REGRESSION: CHANNEL SETTINGS")
+chann1Res = input("", "Channel Timeframe", input.resolution, group="LINEAR REGRESSION: CHANNEL SETTINGS")
+
+showLinReg = input(true, "Show LinReg Channels?", input.bool, group="LINEAR REGRESSION: GENERAL")
+linreg_src = input(close, "Source", input.source, group="LINEAR REGRESSION: GENERAL")
+
+devlen = input(1.0, "Deviation", input.float, minval=0.1, step=0.1, group="LINEAR REGRESSION: GENERAL")
+
+extendit = input(true, "Extend Lines?", input.bool, group="LINEAR REGRESSION: GENERAL")
+showbroken = input(false, "Show Broken Channel",  input.bool, group="LINEAR REGRESSION: GENERAL")
+
+upcol = showLinReg ? color.olive : na //input(defval = color.lime, title = "Up Color", group="LINEAR REGRESSION: GENERAL")
+dncol = showLinReg ? color.maroon : na //input(defval = color.red, title = "Down Color", group="LINEAR REGRESSION: GENERAL")
+widt = input(defval = 2, title = "Line Width", group="LINEAR REGRESSION: GENERAL")
+
+// }
+
+// CALCUALTIONS
+// {
+var colors = array.new_color(2)
+if barstate.isfirst
+    array.unshift(colors, showLinReg ? upcol : na)
+    array.unshift(colors, showLinReg ? dncol : na)
+    
+get_channel(linreg_src, len, res)=>
+    mid = res == "" ? sum(linreg_src, len) / len : htf(res, sum(linreg_src, len) / len, 0)
+    slope = res == "" ? linreg(linreg_src, len, 0) - linreg(linreg_src, len, 1) : htf(res, linreg(linreg_src, len, 0) - linreg(linreg_src, len, 1), 0)
+    intercept  = mid - slope * floor(len / 2) + ((1 - (len % 2)) / 2) * slope
+    endy = intercept  + slope * (len - 1) 
+    dev = 0.0
+    
+    for x = 0 to len - 1
+        dev := dev + pow(linreg_src[x] - (slope * (len - x) + intercept), 2)
+    dev := sqrt(dev/len)
+    [intercept, endy, dev, slope]
+
+chann1Len = chann1Res == "" ? i_chann1Len : periodConv(i_chann1Len, chann1Res)
+
+[y1_, y2_, dev, slope] = get_channel(linreg_src, i_chann1Len, chann1Res)
+
+
+outofchannel1 = (slope > 0 and close < y2_ - dev * devlen) ? 0 : (slope < 0 and close > y2_ + dev * devlen) ? 2 : -1
+
+// }
+
+// FUNCTION: DRAW CHANNELS
+// {
+drawChannel(OutOChan, chanlen, _y1_, _y2_, _dev, _slope) =>
+    var reglines11 = array.new_line(3)
+
+    for x = 0 to 2
+        if not showbroken or OutOChan != x or nz(OutOChan[1], -1) != -1
+            line.delete(array.get(reglines11, x))
+
+        else
+            line.set_color(array.get(reglines11, x), color = color.blue)
+            line.set_width(array.get(reglines11, x), width = 2)
+            line.set_style(array.get(reglines11, x), style = line.style_dotted)
+            line.set_extend(array.get(reglines11, x), extend = extend.none)
+
+        
+        array.set(reglines11, x, 
+                  line.new(x1 = bar_index - (chanlen - 1), 
+                           y1 = _y1_ + _dev * devlen * (x - 1), 
+                           x2 = bar_index, 
+                           y2 = _y2_ + _dev * devlen * (x - 1),
+                           color = array.get(colors, round(max(sign(_slope), 0))),
+                           style =  x % 2 == 1 ? line.style_solid : line.style_dashed,
+                           width = widt,
+                           extend = extendit ? extend.right : extend.none))
+                           
+            // RETURN THE ARRAYS AND USE IT FOR THE CALCULATION OF FILL ZONES
+        
+    reglines11
+
+c1a1 = drawChannel(outofchannel1, chann1Len, y1_, y2_ , dev, slope)
+
+// }
+
+// CHANNEL ZONE CALCULATIONS
+// {
+
+// LINES
+// {
+
+// CHANNEL 1 LINES
+c1a1Upper = array.get(c1a1, 2)
+c1a1Middle = array.get(c1a1, 1)
+c1a1Lower = array.get(c1a1, 0)
+// }
+
+// CALCULATIONS
+// {
+
+// CALCULATE ZONES
+isWithinZone(line1, line2) =>
+    [l1_x1, l1_y1, l1_x2, l1_y2, l1_slope] = getCoord(line1)
+    [l2_x1, l2_y1, l2_x2, l2_y2, l2_slope] = getCoord(line2)
+    x3 = bar_index
+    
+    l1_y3 = (l1_slope * (x3 - l1_x1)) + l1_y1
+    l2_y3 = (l2_slope * (x3 - l2_x1)) + l2_y1
+    
+    barInZone(max(l1_y3, l2_y3), min(l1_y3, l2_y3), 0)
+
+
+currLineValue(line1) =>
+    [l1_x1, l1_y1, l1_x2, l1_y2, l1_slope] = getCoord(line1)
+    x3 = bar_index
+    l1_y3 = (l1_slope * (x3 - l1_x1)) + l1_y1
+    
+    l1_y3
+
+// CHANNEL 1
+c1_wtnUpZone1 = isWithinZone(c1a1Middle, c1a1Upper)
+c1_wtnDnZone1 = isWithinZone(c1a1Middle, c1a1Lower)
+
+
+// }
+
+// }
+
+// FUNCTIONS: DRAW CHANNEL DIRECTION LABELS
+// {
+
+drawLabel(chanLen, c_y1, c_slope) =>
+    var label sidelab = label.new(x = bar_index - (chanLen - 1), y = c_y1, text = "S",  size = size.large)
+    
+    txt = c_slope > 0 ? c_slope > c_slope[1] ? "⇑" : "⇗" : c_slope < 0 ? c_slope < c_slope[1] ? "⇓" : "⇘" : "⇒"
+    
+    stl = c_slope > 0 ? c_slope > c_slope[1] ? label.style_label_up : label.style_label_upper_right : c_slope < 0 ? c_slope < c_slope[1] ? label.style_label_down :  
+      label.style_label_lower_right : label.style_label_right
+      
+    label.set_style(sidelab, stl)
+    label.set_text(sidelab, txt)
+    label.set_x(sidelab, bar_index - (chanLen - 1))
+    label.set_y(sidelab, c_slope > 0 ? c_y1 - dev * devlen : c_slope < 0 ? c_y1 + dev * devlen : c_y1)
+    label.set_color(sidelab, c_slope > 0 ? upcol : c_slope < 0 ? dncol : color.blue)
+    
+drawLabel(chann1Len, y1_, slope)
+
+// }
+
+// SIGNALS
+// {
+
+slopeLong = slope > 0
+slopeShort = slope < 0
+
+bgcolor(slopeLong ? color.green : slopeShort ? color.maroon : na)
+
+c_upper_value = currLineValue(c1a1Upper)
+c_lower_value = currLineValue(c1a1Lower)
+
+channelLong = crossover(close[1], c_lower_value[1])
+channelShort = crossunder(close[1], c_upper_value[1])
+
+plotshape(channelLong, "Long", shape.triangleup, location.belowbar, color.lime, size = size.small)
+plotshape(channelShort, "Short", shape.triangledown, location.abovebar, color.maroon, size = size.small)
+
+// }
+

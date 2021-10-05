@@ -1,0 +1,227 @@
+
+//@version=4
+strategy("Kenny's Strategy", overlay=1, pyramiding=1, default_qty_value=1)
+
+htf(_res, _exp, gaps_on)  => gaps_on == 0 ? security(syminfo.tickerid, _res, _exp) :
+  gaps_on == true ? security(syminfo.tickerid, _res, _exp, barmerge.gaps_on, barmerge.lookahead_off ) : 
+  security(syminfo.tickerid, _res, _exp, barmerge.gaps_off, barmerge.lookahead_off )
+
+// GENERAL SETTINGS
+dispZn = input(true, "Display Entry and SL Lines", input.bool, group="GENERAL SETTINGS")
+
+// MOVING AVERAGE
+// {
+
+// INPUTS 
+maSrc = input(close, "MA Source", input.source, group="MOVING AVERAGE")
+ma1Len = input(50, "MA 1 Length", input.integer, group="MOVING AVERAGE")
+ma2Len = input(100, "MA 2 Length", input.integer, inline="ma2", group="MOVING AVERAGE")
+ma2Mult = input(1.004, "  Multiplier", input.float, inline="ma2", group="MOVING AVERAGE")
+ma3Len = input(100, "MA 3 Length", input.integer, inline="ma3", group="MOVING AVERAGE")
+ma3Mult = input(0.996, "  Multiplier", input.float, inline="ma3", group="MOVING AVERAGE")
+
+
+// CALCULATIONS
+ma1 = ema(maSrc, ma1Len)
+ma2 = ema(maSrc, ma2Len) * ma2Mult
+ma3 = ema(maSrc, ma3Len) * ma3Mult
+
+// FUNCTION TO CHECK FOR MOVING AVERAGE CONDITION
+lineInZone(_top, _bott, _line) => (_line <= _top and _line >= _bott )
+
+maEntry = lineInZone(max(ma2, ma3), min(ma2, ma3), ma1)
+
+// }
+
+// FILTER: MOVING AVERAGE
+// {
+
+usefiltEma = input(true, "Use Long-Term EMA Filter?", input.bool, group="FILTER: LONG-PERIOD MOVING AVERAGE")
+filtEmaLen = input(200, "Long-Period EMA Filter Length", input.integer, group="FILTER: LONG-PERIOD MOVING AVERAGE")
+filtEmaRes = input("", "Filter EMA Timeframe", input.resolution, group="FILTER: LONG-PERIOD MOVING AVERAGE")
+
+filtEma = htf(filtEmaRes, ema(maSrc, filtEmaLen), 0)
+filtEmaInZn = lineInZone(max(ma2, ma3), min(ma2, ma3), filtEma)
+filtEmaOutZn = not(filtEmaInZn)
+
+filtEmaLong = valuewhen(filtEmaInZn[1] and filtEmaOutZn, filtEma, 1) < min(ma2, ma3)
+filtEmaShort = valuewhen(filtEmaInZn[1] and filtEmaOutZn, filtEma, 1) > max(ma2, ma3)
+
+// }
+
+// VUMANCHU 
+// {
+
+// PARAMETERS {
+
+// vmsFlowMeth = input("Method 1", "VuManChu Flow Rule", options=["Method 1", "Method 2"], tooltip="Entry Rule for Vumanchu Flow? \n" 
+//   + "Method 1: 'Green Dot, Green Flow' for Buy, 'Red Dot, Red Flow' for Sell \n" + "Method 2: 'Green Dot, Red Flow' for Buy, 'Red Dot, Green Flow' for Sell")
+  
+  
+vmcUseHTF = input(false, "Use Higher Timeframe", group="VUMANCHU", tooltip="This allows you to base the VuMAnChu Indicator on a Higher Timeframe, if you want to")
+vmcRes = input("240", "Vumanchu Timeframe", input.resolution, group="VUMANCHU", tooltip="This input has no effect if the above checkbox is not ticked \n" +
+  "Ensure that you pick a timeframe that is higher than your current timeframe, to avoid errors")
+useVMCObOS = input(false, "Use VMC Ob/Os? ", group="VUMANCHU", tooltip="Apply Overbought/Oversold Levels in VuManChu calculations?")
+
+// WaveTrend
+wtChannelLen = input(9, title = 'WT Channel Length', type = input.integer, group="VUMANCHU: WAVETREND")
+wtAverageLen = input(12, title = 'WT Average Length', type = input.integer, group="VUMANCHU: WAVETREND")
+wtMASource = input(hlc3, title = 'WT MA Source', type = input.source, group="VUMANCHU: WAVETREND")
+wtMALen = input(3, title = 'WT MA Length', type = input.integer, group="VUMANCHU: WAVETREND")
+
+// WaveTrend Overbought & Oversold lines
+obLevel = input(53, title = 'WT Overbought Level', type = input.integer, group="VUMANCHU: WAVETREND")
+osLevel = input(-53, title = 'WT Oversold Level', type = input.integer, group="VUMANCHU: WAVETREND")
+
+// RSI+MFI
+rsiMFIperiod = input(60,title = 'MFI Period', type = input.integer, group="VUMANCHU: RSI & MFI")
+rsiMFIMultiplier = input(150, title = 'MFI Area multiplier', type = input.float, group="VUMANCHU: RSI & MFI")
+rsiMFIPosY = input(2.5, title = 'MFI Area Y Pos', type = input.float, group="VUMANCHU: RSI & MFI")
+
+
+
+// }
+
+// FUNCTIONS {
+
+ // RSI+MFI
+f_rsimfi(_period, _multiplier, _tf) => security(syminfo.tickerid, _tf, sma(((close - open) / (high - low)) * _multiplier, _period) - rsiMFIPosY)  
+
+ // WAVETREND
+f_wavetrend(src, chlen, avg, malen, tf) =>
+    tfsrc = security(syminfo.tickerid, tf, src)
+    esa = ema(tfsrc, chlen)
+    de = ema(abs(tfsrc - esa), chlen)
+    ci = (tfsrc - esa) / (0.015 * de)
+    wt1 = security(syminfo.tickerid, tf, ema(ci, avg))
+    wt2 = security(syminfo.tickerid, tf, sma(wt1, malen))
+    wtOversold = wt2 <= osLevel
+    wtOverbought = wt2 >= obLevel
+    wtCross = cross(wt1, wt2)
+    wtCrossUp = wt2 - wt1 <= 0
+    wtCrossDown = wt2 - wt1 >= 0
+    wtCrosslast = cross(wt1[2], wt2[2])
+    wtCrossUplast = wt2[2] - wt1[2] <= 0
+    wtCrossDownlast = wt2[2] - wt1[2] >= 0
+    [wt1, wt2, wtOversold, wtOverbought, wtCross, wtCrossUp, wtCrossDown, wtCrosslast, wtCrossUplast, wtCrossDownlast]
+    
+//}
+
+// CALCULATION {
+
+// RSI + MFI Area
+rsiMFI = f_rsimfi(rsiMFIperiod, rsiMFIMultiplier, vmcUseHTF ? vmcRes : timeframe.period)
+
+// Calculates WaveTrend
+[wt1, wt2, wtOversold, wtOverbought, wtCross, wtCrossUp, wtCrossDown, wtCross_last, wtCrossUp_last, wtCrossDown_last] = 
+  f_wavetrend(wtMASource, wtChannelLen, wtAverageLen, wtMALen, vmcUseHTF ? vmcRes : timeframe.period)
+
+//Vumanchu Signals
+vmcMF = rsiMFI < 0 ? "Short" : "Long"								 
+vmcLong = useVMCObOS ? wtCross and wtCrossUp and wtOversold and wt1 < 0 and wt2 < 0 : wtCross and wtCrossUp and wt1 < 0 and wt2 < 0 
+vmcShort = useVMCObOS ? wtCross and wtCrossDown and wtOverbought and wt1 > 0 and wt2 > 0 : wtCross and wtCrossDown and wt1 > 0 and wt2 > 0
+ 
+// }
+//SIGNALS ==> vmcLong, vmcShort, vmcMF ("Long" or "Short")
+
+// }
+
+// STRATEGY EXECUTION
+// {
+
+// ENTRIES
+
+flowLongCaseA = vmcLong and vmcMF == "Long"
+flowLongCaseB = vmcLong and vmcMF == "Short"
+
+flowShortCaseA = vmcShort and vmcMF == "Short"
+flowShortCaseB = vmcShort and vmcMF == "Long"
+
+flowLongRule = bool(na)
+flowShortRule = bool(na)
+
+if ma1 > max(ma2, ma3)
+    flowLongRule := flowLongCaseA or flowLongCaseB
+    flowShortRule := flowShortCaseB
+    
+else if maEntry
+    flowLongRule := flowLongCaseB
+    flowShortRule := flowShortCaseB
+    
+else if ma1 < min(ma2, ma3)
+    flowLongRule := flowLongCaseB
+    flowShortRule := flowShortCaseA or flowShortCaseB
+
+goLong = flowLongRule and filtEmaLong
+goShort = flowShortRule and filtEmaShort
+
+// EXITS
+exitLong = vmcShort
+exitShort = vmcLong
+
+// ENTRIES {
+if (goLong and strategy.position_size == 0)
+    strategy.entry("Long", strategy.long)
+    
+if (goShort and strategy.position_size == 0)
+    strategy.entry("Short", strategy.short)
+//}
+
+// EXITS {
+if (exitLong)
+    strategy.close("Long", when = exitLong)
+if (exitShort)
+    strategy.close("Short", when = exitShort)
+    
+if strategy.position_size > 0 and goShort
+    strategy.close("Long")
+if strategy.position_size < 0 and goLong
+    strategy.close("Short")
+
+//}
+    
+
+//}
+
+// RISK MANAGEMENT
+// {
+
+slLevel = input(4.0, "Stop Loss Level", input.float, group="RISK MANAGEMENT") / 100
+
+var entryPrice = float(na)
+var sl = float(na)
+
+if goLong and strategy.position_size == 0
+    entryPrice := close
+    sl := entryPrice - (slLevel * entryPrice)
+    
+if goShort and strategy.position_size == 0
+    entryPrice := close
+    sl := entryPrice + (slLevel * entryPrice)
+
+
+// SL EXITS
+// {
+
+if strategy.position_size > 0
+    strategy.exit("Exit Long", from_entry = "Long", stop=sl)
+    
+if strategy.position_size < 0
+    strategy.exit("Exit Short", from_entry = "Short", stop=sl)
+
+// }
+
+// }
+
+// PLOTS
+// {
+
+plotshape(goLong and not(strategy.position_size > 0), "Buy", shape.triangleup, location.belowbar, color.lime, size = size.small)
+plotshape(goShort and not(strategy.position_size < 0), "Sell", shape.triangledown, location.abovebar, color.red, size = size.small)
+
+p1 = plot(dispZn ? entryPrice : na, color= strategy.position_size > 0 ? color.lime : strategy.position_size < 0 ? color.red : na)
+p2 = plot(dispZn ? strategy.position_size != 0 ? sl : na : na, color=color.gray, style=plot.style_linebr)
+
+fill(p1, p2, color=dispZn ? strategy.position_size > 0 ? color.new(color.lime, 90) : strategy.position_size < 0 ? color.new(color.red, 90) : na : na )
+
+// }
