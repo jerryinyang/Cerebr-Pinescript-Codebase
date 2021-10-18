@@ -1,0 +1,330 @@
+
+//@version=4
+study("CB RSI (Divergence and OB/OS)",shorttitle="CB RSI (DIV and OB/OS)", overlay=true)
+
+// FUNCTIONS {
+htf(_res, _exp, gaps_on)  => gaps_on == 0 ? security(syminfo.tickerid, _res, _exp) :
+  gaps_on == true ? security(syminfo.tickerid, _res, _exp, barmerge.gaps_on, barmerge.lookahead_off ) : 
+  security(syminfo.tickerid, _res, _exp, barmerge.gaps_off, barmerge.lookahead_off )
+  
+lineInZone(_top, _bott, _line) => (_line <= _top and _line >= _bott )
+// }
+
+//********** REGULAR AND HIDDEN DIVERGENCE
+// {
+// RSI
+// {
+divRsi = rsi(close, 14)
+i_rsiOb = input(72, "RSI Overbought", input.float, group="RSI DIVERGENCE")
+i_rsiOs = input(28, "RSI Oversold", input.float, group="RSI DIVERGENCE")
+lback = input(2, "Pivot Lookback Bars", input.integer, group="RSI DIVERGENCE")
+vertLback = input(1, "Additional Vertices Lookback", input.integer, minval=0, group="RSI DIVERGENCE")
+
+newPHi = pivothigh(divRsi, lback, lback), newPLo = pivotlow(divRsi, lback, lback)
+
+var recRsiHi = 0.0, var recRsiLo = 0.0
+var prevRsiHi = 0.0, var prevRsiLo = 0.0
+
+if newPHi
+    prevRsiHi := recRsiHi
+    recRsiHi := newPHi
+
+if newPLo
+    prevRsiLo := recRsiLo
+    recRsiLo := newPLo
+
+validPHi = newPHi and ( (recRsiHi > prevRsiHi) )
+validPLo = newPLo and ( (recRsiLo < prevRsiLo) )
+
+var arr_valid_recRsiHi = array.new_float(vertLback + 2, 0), var arr_valid_recRsiLo = array.new_float(vertLback + 2, 0)
+
+if validPHi
+    array.shift(arr_valid_recRsiHi), array.push(arr_valid_recRsiHi, recRsiHi)
+    
+if validPLo
+    array.shift(arr_valid_recRsiLo), array.push(arr_valid_recRsiLo, recRsiLo)
+
+// }
+
+// PRICE
+// {
+recPriceHi = high[lback], recPriceLo = low[lback]
+
+var arr_valid_PriceHi = array.new_float(vertLback + 2, 0), var arr_valid_PriceLo = array.new_float(vertLback + 2, 0)
+
+if validPHi
+    array.shift(arr_valid_PriceHi), array.push(arr_valid_PriceHi, recPriceHi)
+    
+if validPLo
+    array.shift(arr_valid_PriceLo), array.push(arr_valid_PriceLo, recPriceLo)
+
+// }
+
+// DIVERGENCE SCANNER
+// {
+divergence() =>
+    
+    signal = ""
+    
+    for i = 0 to vertLback
+        _rsiHi = array.get(arr_valid_recRsiHi, vertLback + 1), _rsiLo = array.get(arr_valid_recRsiLo, vertLback + 1)
+        _prevRsiHi = array.get(arr_valid_recRsiHi, i), _prevRsiLo = array.get(arr_valid_recRsiLo, i)
+        
+        _priceHi = array.get(arr_valid_PriceHi, vertLback + 1), _priceLo = array.get(arr_valid_PriceLo, vertLback + 1)
+        _prevPriceHi = array.get(arr_valid_PriceHi, i), _prevPriceLo = array.get(arr_valid_PriceLo, i)
+        
+        regDiv = ( _prevPriceLo > _priceLo ) and ( _prevRsiLo < _rsiLo ) ? "reg bull" : 
+          ( _prevPriceHi < _priceHi ) and ( _prevRsiHi > _rsiHi ) ? "reg bear" : 
+          "none"
+    
+        hidDiv = ( _prevPriceLo < _priceLo ) and ( _prevRsiLo > _rsiLo ) ? "hid bull" : 
+          ( _prevPriceHi > _priceHi ) and ( _prevRsiHi < _rsiHi ) ? "hid bear" : 
+          "none"
+    
+        if regDiv != "none"
+            signal := regDiv
+        else if hidDiv != "none"
+            signal := hidDiv
+
+    //RETURN
+    signal
+    
+bullRegDiv = divRsi[lback] < 40 and validPLo and divergence() == "reg bull"
+bearRegDiv = divRsi[lback] > 60 and validPHi and divergence() == "reg bear"
+// }
+
+// PLOTS
+// {
+plotshape( bullRegDiv, "Bullish Divergence", shape.triangleup, location.belowbar, #00ff00, offset=-lback, text="D", textcolor=color.white)
+plotshape( bearRegDiv, "Bearish Divergence", shape.triangledown, location.abovebar, #ff0000, offset=-lback, text="D", textcolor=color.white)
+
+// }
+
+// }
+
+
+
+// RSI OB/OS
+// {    
+
+rsiRes = input("", "RSI Timeframe", input.resolution, group="RSI OB/OS")
+obos_rsi = htf(rsiRes, divRsi, 0)
+c_rsiOb = crossover(obos_rsi, i_rsiOb), c_rsiOs = crossunder(obos_rsi, i_rsiOs)
+
+obBaseZn = input(55, "Overbought Base Line", input.float, group="RSI OB/OS")
+osBaseZn = input(45, "Oversold Base Line", input.float, group="RSI OB/OS")
+
+obBaseX = i_rsiOs, osBaseX = i_rsiOb
+
+// }
+
+// OB/OS COUNTERS (SQ & NSQ)
+// { 
+
+// TRIGGER FOR BASE ZONE TOUCH : OVERBOUGHT {
+
+obZnLimTop = max(obBaseZn, obBaseX), obZnLimBott = min(obBaseZn, obBaseX)
+
+rsiInObLimZn = crossunder(obos_rsi, obZnLimTop) and obZnLimBott <= obos_rsi
+rsiAboveObLimZn = (not rsiInObLimZn) and obos_rsi > obZnLimTop
+rsiBelowObLimZn = (not rsiInObLimZn) and obos_rsi < obZnLimBott
+    
+// }
+
+// TRIGGER FOR BASE ZONE TOUCH : OVERSOLD {
+
+osZnLimTop = max(osBaseZn, osBaseX), osZnLimBott = min(osBaseZn, osBaseX)
+
+rsiInOsLimZn = crossover(obos_rsi, osZnLimBott) and osZnLimTop >= obos_rsi
+rsiAboveOsLimZn = (not rsiInOsLimZn) and obos_rsi > osZnLimTop
+rsiBelowOsLimZn = (not rsiInOsLimZn) and obos_rsi < osZnLimBott
+    
+// }
+
+// NON-SEQUENCING ALGORITHM
+// {
+var nsq_countOb = 0, var nsq_countOs = 0
+
+if c_rsiOb
+    nsq_countOb += 1
+if c_rsiOs
+    nsq_countOs += 1
+// }
+
+// SEQUENCING ALGORITHM FOR SELL/OVERBOUGHT SCEANRIOS
+// {
+
+var countOB = 0
+var countObZn = 0
+
+var obDone = "none"
+var obNext = "" 
+
+if obNext == ""
+    if c_rsiOb and countOB == 0 
+        countOB := 1
+        obDone := "ob 1"
+        obNext := "lim 1"
+    
+else if obNext == "lim 1"
+    if rsiInObLimZn and countObZn == 0 and obDone == "ob 1" 
+        countObZn := 1
+        obDone := "lim 1"
+        obNext := "ob 2"
+
+else if obNext == "ob 2"
+    if c_rsiOb and countOB == 1 and obDone == "lim 1" 
+        countOB := 2
+        obDone := "ob 2"
+        obNext := "lim 2"
+
+else if obNext == "lim 2"
+    if rsiInObLimZn and countObZn == 1 and obDone == "ob 2" 
+        countObZn := 2
+        obDone := "lim 2"
+        obNext := "ob 3"
+        
+else if obNext == "ob 3"
+    if c_rsiOb and countOB == 2 and obDone == "lim 2" 
+        countOB := 3
+        obDone := "ob 3"
+        obNext := "lim 3"
+
+else if obNext == "lim 3"
+    if rsiInObLimZn and countObZn == 2 and obDone == "ob 3" 
+        obDone := "lim 3"
+        obNext := "ob 4"
+    
+else if obNext == "ob 4"
+    if c_rsiOb and countOB == 3 and obDone == "lim 3" 
+        countOB := 4
+        obDone := "ob 4"
+        obNext := "lim 4"
+
+else if obNext == "lim 4"
+    if rsiInObLimZn and countObZn == 3 and obDone == "ob 4" 
+        countObZn := 4
+        obDone := "lim 4"
+
+// }
+
+// SEQUENCING ALGORITHM FOR BUY/OVERSOLD SCEANRIOS
+// {
+    
+var countOS = 0
+var countOsZn = 0
+
+var osDone = "none"
+var osNext = "" 
+
+if osNext == ""
+    if c_rsiOs and countOS == 0 
+        countOS := 1
+        osDone := "os 1"
+        osNext := "lim 1"
+    
+else if osNext == "lim 1"
+    if rsiInOsLimZn and countOsZn == 0 and osDone == "os 1" 
+        countOsZn := 1
+        osDone := "lim 1"
+        osNext := "os 2"
+
+else if osNext == "os 2"
+    if c_rsiOs and countOS == 1 and osDone == "lim 1" 
+        countOS := 2
+        osDone := "os 2"
+        osNext := "lim 2"
+
+else if osNext == "lim 2"
+    if rsiInOsLimZn and countOsZn == 1 and osDone == "os 2" 
+        countOsZn := 2
+        osDone := "lim 2"
+        osNext := "os 3"
+        
+else if osNext == "os 3"
+    if c_rsiOs and countOS == 2 and osDone == "lim 2" 
+        countOS := 3
+        osDone := "os 3"
+        osNext := "lim 3"
+
+else if osNext == "lim 3"
+    if rsiInOsLimZn and countOsZn == 2 and osDone == "os 3" 
+        countOsZn := 3
+        osDone := "lim 3"
+        osNext := "os 4"
+    
+else if osNext == "os 4"
+    if c_rsiOs and countOS == 3 and osDone == "lim 3" 
+        countOS := 4
+        osDone := "os 4"
+        osNext := "lim 4"
+
+else if osNext == "lim 4"
+    if rsiInOsLimZn and countOsZn == 3 and osDone == "os 4"
+        countOsZn := 4
+        osDone := "lim 4"
+
+// }
+
+// RESET OF COUNTERS
+// {
+
+if rsiBelowObLimZn
+    countOB := 0
+    countObZn := 0
+    obDone := "none"
+    obNext := "" 
+    nsq_countOb := 0
+
+    
+if rsiAboveOsLimZn
+    countOS := 0
+    countOsZn := 0
+    osDone := "none"
+    osNext := ""
+    nsq_countOs := 0
+
+// }
+
+// }
+
+// ALGORITHM
+// {
+
+minSeqObOs = input(2, "Minimum Sequenced Overbought/Oversold", options=[1, 2, 3, 4], group="RSI OB/OS: ALGORITHM")
+minNsqObOs = input(4, "Minimum Sequenced Overbought/Oversold", input.integer, group="RSI OB/OS: ALGORITHM")
+
+seqObVal = obDone == "ob 1" ? 1 : obDone == "ob 2" ? 2 : obDone == "ob 3" ? 3 : obDone == "ob 4" ? 4 : na   
+seqOsVal = osDone == "os 1" ? 1 : osDone == "os 2" ? 2 : osDone == "os 3" ? 3 : osDone == "os 4" ? 4 : na  
+
+bull_rsiOs = (seqOsVal >= minSeqObOs) and (nsq_countOs >= minNsqObOs)
+bear_rsiOs = (seqObVal >= minSeqObOs) and (nsq_countOb >= minNsqObOs)
+
+plot(nsq_countOs, color=color.lime)
+plot(nsq_countOb, color=color.maroon)
+// }
+
+// PLOTS
+// {
+
+// PLOT PEAKS {
+plotshape(obDone == "ob 1" and obDone[1] != "ob 1" , "Shape: OB 1", shape.labeldown, location.abovebar, color.maroon, text="1", textcolor=color.white, size = size.tiny)
+
+plotshape(obDone == "ob 2" and obDone[1] != "ob 2" , "Shape: OB 2", shape.labeldown, location.abovebar, color.maroon, text="2", textcolor=color.white, size = size.tiny)
+
+plotshape(obDone == "ob 3" and obDone[1] != "ob 3" , "Shape: OB 3", shape.labeldown, location.abovebar, color.maroon, text="3", textcolor=color.white, size = size.tiny)
+
+plotshape(obDone == "ob 4" and obDone[1] != "ob 4" , "Shape: OB 4", shape.labeldown, location.abovebar, color.maroon, text="4", textcolor=color.white, size = size.tiny)
+// }
+
+// PLOT VALLEYS {
+plotshape(osDone == "os 1" and osDone[1] != "os 1" , "Shape: OS 1", shape.labelup, location.belowbar, color.olive, text="1", textcolor=color.white, size = size.tiny)
+
+plotshape(osDone == "os 2" and osDone[1] != "os 2" , "Shape: OS 2", shape.labelup, location.belowbar, color.olive, text="2", textcolor=color.white, size = size.tiny)
+
+plotshape(osDone == "os 3" and osDone[1] != "os 3" , "Shape: OS 3", shape.labelup, location.belowbar, color.olive, text="3", textcolor=color.white, size = size.tiny)
+
+plotshape(osDone == "os 4" and osDone[1] != "os 4" , "Shape: OS 4", shape.labelup, location.belowbar, color.olive, text="4", textcolor=color.white, size = size.tiny)
+// }
+
+// }
