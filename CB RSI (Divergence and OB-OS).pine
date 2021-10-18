@@ -291,14 +291,17 @@ if rsiAboveOsLimZn
 // ALGORITHM
 // {
 
-minSeqObOs = input(2, "Minimum Sequenced Overbought/Oversold", options=[1, 2, 3, 4], group="RSI OB/OS: ALGORITHM")
-minNsqObOs = input(4, "Minimum Sequenced Overbought/Oversold", input.integer, group="RSI OB/OS: ALGORITHM")
+minSeqObOs = input(2, "Threshold Sequenced Overbought/Oversold", options=[1, 2, 3, 4], group="RSI OB/OS: ALGORITHM")
+minNsqObOs = input(4, "Threshold Non-sequenced Overbought/Oversold", input.integer, group="RSI OB/OS: ALGORITHM")
+useSumObOs = input(true, "Sum Sequenced/Non-sequenced Overbought/Oversold", input.bool, group="RSI OB/OS: ALGORITHM")
+minSumObOs = input(4, "Threshold Summed Overbought/Oversold", input.integer, group="RSI OB/OS: ALGORITHM")
+
 
 seqObVal = obDone == "ob 1" ? 1 : obDone == "ob 2" ? 2 : obDone == "ob 3" ? 3 : obDone == "ob 4" ? 4 : na   
 seqOsVal = osDone == "os 1" ? 1 : osDone == "os 2" ? 2 : osDone == "os 3" ? 3 : osDone == "os 4" ? 4 : na  
 
-bull_rsiOs = (seqOsVal >= minSeqObOs) and (nsq_countOs >= minNsqObOs)
-bear_rsiOs = (seqObVal >= minSeqObOs) and (nsq_countOb >= minNsqObOs)
+bull_rsiOs = useSumObOs ? (seqOsVal + nsq_countOs) >= minSumObOs : (seqOsVal >= minSeqObOs) and (nsq_countOs >= minNsqObOs)
+bear_rsiOs = useSumObOs ? (seqObVal + nsq_countOb) >= minSumObOs : (seqObVal >= minSeqObOs) and (nsq_countOb >= minNsqObOs)
 
 plot(nsq_countOs, color=color.lime)
 plot(nsq_countOb, color=color.maroon)
