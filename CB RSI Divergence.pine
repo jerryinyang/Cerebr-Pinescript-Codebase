@@ -1,0 +1,100 @@
+
+//@version=4
+study("CB RSI Divergence")
+
+// Vertices = Checking more than just the previous price/divRsi for divergences; how many points to consider
+
+//********** REGULAR AND HIDDEN DIVERGENCE
+// {
+// RSI
+// {
+divRsi = rsi(close, 14), rsiOb = 70, rsiOs = 30
+lback = input(2, "Lookback Bars", input.integer)
+vertLback = input(1, "Additional Vertices Lookback", input.integer, minval=0)
+
+newPHi = pivothigh(divRsi, lback, lback), newPLo = pivotlow(divRsi, lback, lback)
+
+var recRsiHi = 0.0, var recRsiLo = 0.0
+var prevRsiHi = 0.0, var prevRsiLo = 0.0
+
+if newPHi
+    prevRsiHi := recRsiHi
+    recRsiHi := newPHi
+
+if newPLo
+    prevRsiLo := recRsiLo
+    recRsiLo := newPLo
+
+validPHi = newPHi and ( (recRsiHi > prevRsiHi) )
+validPLo = newPLo and ( (recRsiLo < prevRsiLo) )
+
+var arr_valid_recRsiHi = array.new_float(vertLback + 2, 0), var arr_valid_recRsiLo = array.new_float(vertLback + 2, 0)
+
+if validPHi
+    array.shift(arr_valid_recRsiHi), array.push(arr_valid_recRsiHi, recRsiHi)
+    
+if validPLo
+    array.shift(arr_valid_recRsiLo), array.push(arr_valid_recRsiLo, recRsiLo)
+
+// }
+
+// PRICE
+// {
+recPriceHi = high[lback], recPriceLo = low[lback]
+
+var arr_valid_PriceHi = array.new_float(vertLback + 2, 0), var arr_valid_PriceLo = array.new_float(vertLback + 2, 0)
+
+if validPHi
+    array.shift(arr_valid_PriceHi), array.push(arr_valid_PriceHi, recPriceHi)
+    
+if validPLo
+    array.shift(arr_valid_PriceLo), array.push(arr_valid_PriceLo, recPriceLo)
+
+// }
+
+// DIVERGENCE SCANNER
+// {
+divergence() =>
+    
+    signal = ""
+    
+    for i = 0 to vertLback
+        _rsiHi = array.get(arr_valid_recRsiHi, vertLback + 1), _rsiLo = array.get(arr_valid_recRsiLo, vertLback + 1)
+        _prevRsiHi = array.get(arr_valid_recRsiHi, i), _prevRsiLo = array.get(arr_valid_recRsiLo, i)
+        
+        _priceHi = array.get(arr_valid_PriceHi, vertLback + 1), _priceLo = array.get(arr_valid_PriceLo, vertLback + 1)
+        _prevPriceHi = array.get(arr_valid_PriceHi, i), _prevPriceLo = array.get(arr_valid_PriceLo, i)
+        
+        regDiv = ( _prevPriceLo > _priceLo ) and ( _prevRsiLo < _rsiLo ) ? "reg bull" : 
+          ( _prevPriceHi < _priceHi ) and ( _prevRsiHi > _rsiHi ) ? "reg bear" : 
+          "none"
+    
+        hidDiv = ( _prevPriceLo < _priceLo ) and ( _prevRsiLo > _rsiLo ) ? "hid bull" : 
+          ( _prevPriceHi > _priceHi ) and ( _prevRsiHi < _rsiHi ) ? "hid bear" : 
+          "none"
+    
+        if regDiv != "none"
+            signal := regDiv
+        else if hidDiv != "none"
+            signal := hidDiv
+
+    //RETURN
+    signal
+    
+bullRegDiv = divRsi[lback] < 40 and validPLo and divergence() == "reg bull"
+bearRegDiv = divRsi[lback] > 60 and validPHi and divergence() == "reg bear"
+// }
+// }
+
+
+
+// PLOTS
+// {
+plot(divRsi, linewidth=2), hline(rsiOb), hline(rsiOs)
+plot(validPHi ? recRsiHi : na, "High Pivots", #ff0000, 2, style=plot.style_circles, offset=-lback)
+plot(validPLo ? recRsiLo : na, "Low Pivots", #00ff00, 2, style=plot.style_circles, offset=-lback)
+
+plotshape( bullRegDiv, "Bullish Divergence", shape.triangleup, location.bottom, #00ff00, offset=-lback, text="D", textcolor=color.white)
+plotshape( bearRegDiv, "Bearish Divergence", shape.triangledown, location.top, #ff0000, offset=-lback, text="D", textcolor=color.white)
+
+// }
