@@ -163,7 +163,7 @@ new_fvg = box(na)
 
 if fvg == "above"
     // PLOT THE FVG BLOCK
-    new_fvg := box.new(op3, lo3, cl1 , hi1, color(na), xloc = xloc.bar_time, bgcolor = color(na))
+    new_fvg := box.new(op3, hi1, cl1 , lo3, color(na), xloc = xloc.bar_time, bgcolor = color(na))
     newFvgAbove := true
     
     if array.size(upfvgBox) < maxBoxes / 2
@@ -176,7 +176,7 @@ if fvg == "above"
 
 else if fvg == "below"
     // PLOT THE FVG BLOCK
-    new_fvg := box.new(op3, hi3, cl1 , lo1, color(na), xloc = xloc.bar_time, bgcolor =  color(na))
+    new_fvg := box.new(op3, lo1, cl1 , hi3, color(na), xloc = xloc.bar_time, bgcolor =  color(na))
     newFvgBelow := true
     
     if array.size(dnfvgBox) < maxBoxes / 2
