@@ -1,0 +1,331 @@
+//@version=5 
+indicator("Hedge Exit Algo", overlay=true, precision=4)
+
+// CONSTANTS 
+// [ 
+contract_size = syminfo.ticker == "XAUUSD" or syminfo.ticker == "XAGUSD" ? 100 : 100000
+pip() => syminfo.mintick * (syminfo.type == "forex" ? 10 : 1)
+pip_value = syminfo.ticker == "XAUUSD" or syminfo.ticker == "XAGUSD" ? contract_size * syminfo.mintick * 10 : contract_size * syminfo.mintick
+USDYYY = syminfo.currency != 'USD' and syminfo.basecurrency != 'USD' ? 'USD' + syminfo.currency  : 'ZAR'  + syminfo.currency
+_USDYYY_rate = request.security(USDYYY , "", close, lookahead=barmerge.lookahead_on)
+// ]
+
+// FUNCTIONS
+// [
+
+// Function to Calculate Profit; For Calcualting total loss and total gain
+f_calc_profit(_pip_amount, _price, _lotsize) =>
+    // [
+    profit = 0.0
+    
+    if syminfo.type == "forex" 
+        if syminfo.currency == "USD" // XXX-USD
+            profit := pip_value * _pip_amount * _lotsize
+            
+        else if syminfo.basecurrency == "USD" // USD-XXX
+            profit := ( pip_value * _pip_amount * _lotsize )  / _price
+
+        else if syminfo.basecurrency != 'USD' and syminfo.currency != "USD"// XXX-YYY
+            profit := ( (pip_value * _pip_amount * _lotsize ) / _USDYYY_rate ) // (YYYUSD_exchange_rate => XXX-USD_exchange_rate / XXX-YYY_exchange_rate )
+    
+    profit // Return
+    
+    // ]
+
+f_calc_size(_profit, _pip_amount, _price) =>
+    // [
+    size = 0.0
+    
+    if syminfo.type == "forex" 
+        if syminfo.currency == "USD" // XXX-USD
+            size := _profit / (pip_value * _pip_amount)
+            
+        else if syminfo.basecurrency == "USD" // USD-XXX
+            size := ( _profit * _price ) / ( pip_value * _pip_amount )
+            
+        else if syminfo.basecurrency != 'USD' and syminfo.currency != "USD"// XXX-YYY
+            size := (_profit * _USDYYY_rate) / (pip_value * _pip_amount )
+    
+    size // Return
+    
+    // ]
+    
+f_calc_new_size(_profit, _total_gain_lots, _total_loss_lots, _tp_amt, _sl_amt, _price) =>
+    // [
+    size = 0.0
+    
+    if syminfo.type == "forex" 
+        if syminfo.currency == "USD" // XXX-USD
+            size := ( ( ( _profit / pip_value ) + (_sl_amt * _total_loss_lots) ) / _tp_amt ) - _total_gain_lots
+            
+        else if syminfo.basecurrency == "USD" // USD-XXX
+            size := ( ( ( ( _profit * _price ) /  pip_value ) + (_sl_amt * _total_loss_lots) ) / _tp_amt ) - _total_gain_lots
+            
+        else if syminfo.basecurrency != 'USD' and syminfo.currency != "USD"// XXX-YYY
+            size := ( ( ( (_profit * _USDYYY_rate) / pip_value ) + (_sl_amt * _total_loss_lots) ) / _tp_amt ) - _total_gain_lots
+    
+    size // Return
+    
+    // ]
+
+f_round_lot(price) =>
+    // [
+    base = 0.01
+    
+    result = math.round(price, 2)
+    
+    if result < price 
+        result + base
+    else 
+        result
+    // ]
+    
+f_even(price) => price % 2 == 0
+f_odd(price) => price % 2 == 1
+
+// ]
+
+// ENTRY GENERATION 
+// [
+
+f_ema = ta.ema(close, 7)
+s_ema = ta.ema(close, 15)
+x_ema = ta.ema(close, 50)
+
+atr = ta.atr(14)
+
+sldist = 5 * pip()
+tpdist = 1.5 * sldist
+
+// Entry Conditions, Take Profit and Stop Loss
+cond_buy = x_ema < s_ema and ta.crossover(f_ema, s_ema)
+cond_sell = x_ema > s_ema and ta.crossunder(f_ema, s_ema)
+
+var tp = float(na), var sl = float(na)
+
+if cond_buy
+    tp := close + tpdist
+    sl := close - sldist
+
+else if cond_sell
+    tp := close - tpdist
+    sl := close + sldist
+
+
+new_trade = false
+new_dir = ""
+
+if cond_buy
+    new_trade := true
+    new_dir == 'long'
+else if cond_sell
+    new_trade := true
+    new_dir == "short"
+// ]
+
+// ORDER VARIABLES AND TRADE CONDITIONS
+// [
+var trade_active = false // Monitor Active Order
+var trade_direction = "" // Monitor Active Order Direction
+
+var main_price = float(na),     var counter_price = float(na)
+var main_tp = float(na),        var counter_tp = float(na)
+
+var long_entry_price = float(na),       var short_entry_price = float(na)
+var long_tp = float(na),                var short_tp = float(na)
+
+// Condition for Trade Executed
+// If entry condition on previous bar, and not trade_active, and strategy.position_size = 0 on previous bar, but >/< 0 on current bar
+trade_executed = new_trade and not trade_active[1] // and (cond_buy or cond_sell) // and (strategy.position_size[1] == 0 and strategy.position_size != 0 )
+
+// This calculation is done when the trade has been executed (the bar after the entry signal)
+
+if new_trade and not trade_active 
+    trade_active := true
+    trade_direction := new_dir
+    
+    exit_dist = 0.0
+    
+    // General (Non Direction-sprecific) Order Variables {
+    main_price := close
+    main_tp := tp
+    
+    exit_dist := math.abs( main_price - main_tp )
+    
+    counter_price := sl
+    counter_tp := cond_buy ? (counter_price - exit_dist) : cond_sell ? (counter_price + exit_dist) : na
+    // }
+    
+    // Direction-Specific Variables {
+    if trade_direction == 'long'
+        long_entry_price := open 
+        long_tp := tp 
+        
+        exit_dist := math.abs( long_entry_price - long_tp )
+        
+        short_entry_price := sl
+        short_tp := short_entry_price - exit_dist
+    
+    else if trade_direction == 'short'
+        short_entry_price := open
+        short_tp := tp 
+        
+        exit_dist := math.abs( short_entry_price - short_tp )  
+        
+        long_entry_price := sl 
+        long_tp := long_entry_price + exit_dist
+        // }
+
+// Conditions for Order Exits and Re-entry
+long_tp_hit = high >= long_tp,              short_tp_hit = low <= short_tp
+long_trigger = high >= long_entry_price,    short_trigger = low <= short_entry_price
+
+// ]
+
+// ACCOUNT VARIABLES
+// [
+i_balance = input.float(10000, "Account Balance", minval=1, group="Risk Management : Account Variables")
+i_profit_meth = input.string("Profit % of Account Balance", "Method for Calculating the Desired Profit", options=["Fixed Profit Amount", 
+  "Profit % of Account Balance", "Fixed Risk Amount", "Risk % of Account Balance"], group="Risk Management : Account Variables")
+  
+i_profit = input.float(1, "Risk or Profit Amount ", minval=0.1, step=0.1, group="Risk Management : Account Variables")
+
+allowed_loss = 
+  i_profit_meth == "Fixed Risk Amount" ? i_profit :
+  i_profit_meth == "Risk % of Account Balance" ? (i_profit / 100 ) * i_balance : na
+
+desired_profit = switch i_profit_meth 
+    "Fixed Profit Amount" => i_profit
+    "Profit % of Account Balance" => ( i_profit / 100) * i_balance
+    => ( i_profit / 100 ) * i_balance
+// ]
+
+// HEDGE SEQUENCE VARIABLES
+// [
+var completed_orders = 0
+var pending_order = 1
+
+// Array to store Order Sizes
+var arr_order_size = array.from(
+  float(0),  float(0),  float(0),  float(0),  float(0),
+  float(0),  float(0),  float(0),  float(0),  float(0),
+  float(0),  float(0),  float(0),  float(0),  float(0),
+  float(0),  float(0),  float(0),  float(0),  float(0))
+  
+// Store SL and TP distance in pips
+var tp_amt = float(0), var sl_amt = float(0)
+// ]
+
+// ORDER SIZE CALCULATIONS, AND SEQUENCE INITIALIZATION
+if trade_executed // Initial Point of Execution
+    // [
+    
+    // Calculate and Store SL and TP Distance
+    tp_amt := math.abs( main_price - main_tp ) / pip() 
+    sl_amt := math.abs( main_price - counter_tp ) / pip()
+    
+    
+    // If Desired Profit is determined by Risk
+    if (i_profit_meth == "Fixed Risk Amount" or i_profit_meth == "Risk % of Account Balance")
+        loss_size = f_calc_size(allowed_loss, sl_amt, counter_price)
+        desired_profit := f_calc_profit(tp_amt, main_price, loss_size)
+    
+    // Calculate and round up the Initial Risk
+    init_size = f_calc_size(desired_profit, tp_amt, main_price)
+    
+    // Assign Initial Lot Size
+    array.set(arr_order_size, 0, (f_round_lot( init_size )))
+    
+    // For-loop to calculate all remaining order lot sizes [
+    for i = 2 to array.size(arr_order_size) // i, being the trade id, starting from 1 as first trade
+        size = 0.0
+        
+        sum_even = 0.0, sum_odd = 0.0
+        sum_lot_gain = 0.0, sum_lot_loss = 0.0
+        
+        // Get Total Sum of Lot Sizes in Profit and Loss [
+        for j = 1 to (i - 1)
+            if f_even(j)
+                sum_even := sum_even + array.get(arr_order_size, j-1)
+            
+            else if f_odd(j)
+                sum_odd := sum_odd + array.get(arr_order_size, j-1)
+        
+        // If 'i' is even, gain trades are even, and vice versa
+        sum_lot_gain := f_even(i) ? sum_even : sum_odd
+        sum_lot_loss := f_even(i) ? sum_odd  : sum_even
+        // ]
+        
+        // Calculate Volume Size [
+        
+        _price = f_odd(i) ? main_price : counter_price
+        
+        size := f_calc_new_size(desired_profit, sum_lot_gain, sum_lot_loss, tp_amt, sl_amt, _price)
+        // ]
+            
+        array.set(arr_order_size, i-1, ( f_round_lot(size) ) )
+        // ]
+    
+    // First entry confirmed, next entry (first counter entry pending)
+    completed_orders := 1
+    pending_order := 2
+    // ]
+
+// RESET VARIABLES WHEN TRADE US EXITED
+if trade_active and (long_tp_hit or short_tp_hit)
+    // [
+
+    trade_active := false 
+    trade_direction := "" 
+    
+    main_price := float(na)
+    counter_price := float(na)
+    main_tp := float(na)
+    counter_tp := float(na)
+    
+    long_entry_price := float(na)
+    short_entry_price := float(na)
+    long_tp := float(na)
+    short_tp := float(na)
+    
+    array.fill(arr_order_size, 0.0)
+    
+    tp_amt := float(0)
+    sl_amt := float(0)
+    
+    completed_orders := 0
+    pending_order := 1
+    // ]
+
+// PLOT 
+// [
+// bgcolor()
+
+plot(main_price, color=color.white, style=plot.style_linebr)
+plot(main_tp, color=color.lime, style=plot.style_linebr)
+plot(counter_price, color=color.white, style=plot.style_linebr)
+plot(counter_tp, color=color.lime, style=plot.style_linebr)
+
+
+plot( fixnan(   array.get(arr_order_size, 0)    ),     "Size 1",   color=color.new(color.fuchsia, 100))
+plot( fixnan(   array.get(arr_order_size, 1)    ),     "Size 2",   color=color.new(color.fuchsia, 100))
+plot( fixnan(   array.get(arr_order_size, 2)    ),     "Size 3",   color=color.new(color.fuchsia, 100))
+plot( fixnan(   array.get(arr_order_size, 3)    ),     "Size 4",   color=color.new(color.fuchsia, 100))
+plot( fixnan(   array.get(arr_order_size, 4)    ),     "Size 5",   color=color.new(color.fuchsia, 100))
+plot( fixnan(   array.get(arr_order_size, 5)    ),     "Size 6",   color=color.new(color.fuchsia, 100))
+plot( fixnan(   array.get(arr_order_size, 6)    ),     "Size 7",   color=color.new(color.fuchsia, 100))
+plot( fixnan(   array.get(arr_order_size, 7)    ),     "Size 8",   color=color.new(color.fuchsia, 100))
+plot( fixnan(   array.get(arr_order_size, 8)    ),     "Size 9",   color=color.new(color.fuchsia, 100))
+plot( fixnan(   array.get(arr_order_size, 9)    ),     "Size 10",  color=color.new(color.fuchsia, 100))
+plot( fixnan(   array.get(arr_order_size, 10)   ),    "Size 11",  color=color.new(color.fuchsia, 100))
+plot( fixnan(   array.get(arr_order_size, 11)   ),    "Size 12",  color=color.new(color.fuchsia, 100))
+plot( fixnan(   array.get(arr_order_size, 12)   ),    "Size 13",  color=color.new(color.fuchsia, 100))
+plot( fixnan(   array.get(arr_order_size, 13)   ),    "Size 14",  color=color.new(color.fuchsia, 100))
+plot( fixnan(   array.get(arr_order_size, 14)   ),    "Size 15",  color=color.new(color.fuchsia, 100))
+plot( fixnan(   array.get(arr_order_size, 15)   ),    "Size 16",  color=color.new(color.fuchsia, 100))
+plot( fixnan(   array.get(arr_order_size, 16)   ),    "Size 17",  color=color.new(color.fuchsia, 100))
+plot( fixnan(   array.get(arr_order_size, 17)   ),    "Size 18",  color=color.new(color.fuchsia, 100))
+plot( fixnan(   array.get(arr_order_size, 18)   ),    "Size 19",  color=color.new(color.fuchsia, 100))
+plot( fixnan(   array.get(arr_order_size, 19)   ),    "Size 20",  color=color.new(color.fuchsia, 100))
+
+// ]
