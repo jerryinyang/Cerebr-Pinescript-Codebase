@@ -1,0 +1,594 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © Professeur_X
+// This script contains methods for Stop hunt/Raid detection, as well as Rob Hoffman IRB Breakout Strategy
+
+//@version=5
+indicator("CTF Raid Indicator", overlay=true, max_boxes_count = 500, max_bars_back = 3000, max_lines_count = 500)
+
+// RETRACEMENT BAR
+// [
+
+// Parameters [
+array_limit = 200, max_line_back = 300
+
+high_limit =  high - ( .45 * (high - low) )
+low_limit = low +  ( .45 * (high - low) )
+
+cond_hm_bull_bar = ( open <= high_limit ) and ( close <= high_limit )
+cond_hm_bear_bar = ( open >= low_limit ) and ( close >= low_limit )
+
+var arr_bull_bars = array.new_string(array_limit)
+var arr_bear_bars = array.new_string(array_limit)
+
+arr_broken_bull_bars = array.new_string()
+arr_broken_bear_bars = array.new_string()
+// ]
+
+f_add_hm_bar(_type, val_HL, _bi ) =>
+    // [
+    _text = "#" + "|" + str.tostring(val_HL) + "|" + str.tostring(_bi)
+    if _type == "bull"
+        // Store in Bull Array
+        if array.size(arr_bull_bars) >= array_limit     
+            array.pop(arr_bull_bars)
+            array.unshift(arr_bull_bars, _text)
+        else
+            array.unshift(arr_bull_bars, _text)
+    
+    else if _type == "bear"
+        // Store in Bear Array
+        if array.size(arr_bear_bars) >= array_limit     
+            array.pop(arr_bear_bars)
+            array.unshift(arr_bear_bars, _text)
+        else
+            array.unshift(arr_bear_bars, _text)
+    
+    else if _type == "broken bull"
+        // Store in Broken Bull Array
+        array.unshift(arr_broken_bull_bars, _text)
+    
+    else if _type == "broken bear"
+        // Store in Broken Bear Array
+        array.unshift(arr_broken_bear_bars, _text)
+    // ]
+    
+f_decode_hm_arr(_text) => 
+    // [
+    txt_array = str.split(_text, "|")
+    
+    if array.size(txt_array) == 3
+        val = str.tonumber( array.get(txt_array, 1) )
+        bi = int( str.tonumber( array.get(txt_array, 2) ) )
+    
+        [val, bi]
+    // ]
+    
+f_remove_index(_source, _arr) =>
+    // [
+    if array.size(_source) > 0
+        for i = 0 to array.size(_source) - 1
+            array.remove(_arr, array.get(_source, i) )
+    // ]
+
+f_scan_bull_break() =>
+    // [
+    remove_txt = array.new_int()
+    
+    if array.size(arr_bull_bars) > 0
+        for i = 0 to array.size(arr_bull_bars) - 1
+            // Scan through all available IRB bars to see if current candle breaks out of any
+            [val , bi] = f_decode_hm_arr( array.get(arr_bull_bars, i) )
+            
+            if close > val 
+                // Add to Broken Levels -> to be plotted
+                f_add_hm_bar("broken bull", val, bi )
+                array.unshift(remove_txt, i)
+    
+    f_remove_index(remove_txt, arr_bull_bars)
+    // ]
+
+f_scan_bear_break() =>
+    // [
+    remove_txt = array.new_int()
+    
+    if array.size(arr_bear_bars) > 0
+        for i = 0 to array.size(arr_bear_bars) - 1
+            // Scan through all available IRB bars to see if current candle breaks out of any
+            [val , bi] = f_decode_hm_arr( array.get(arr_bear_bars, i) )
+            
+            if close < val 
+                // Add to Broken Levels -> to be plotted
+                f_add_hm_bar("broken bear", val, bi )
+                array.unshift(remove_txt, i)
+    
+    f_remove_index(remove_txt, arr_bear_bars)
+    // ]
+
+
+// Add New Retracement Bars into Array [
+if cond_hm_bull_bar
+    f_add_hm_bar("bull", high, bar_index )
+
+if cond_hm_bear_bar
+    f_add_hm_bar("bear", low, bar_index )
+    // ]
+
+// // Plot Remove Broken Level [
+// f_scan_bull_break()
+// f_scan_bear_break() 
+// // ] This method would be used for the Rob Hoffman Breakout Strategy, not for Stop Hunt Detection
+
+// // Plot Broken Retracement Bars [
+// if show_retrace_bar
+//     if array.size(arr_broken_bull_bars) > 0 // For Bullish Breakout
+//         array.sort(arr_broken_bull_bars, order.descending)
+        
+//         [val , bi] = f_decode_hm_arr( array.get(arr_broken_bull_bars, 0) )
+        
+//         if bar_index - bi <= max_line_back
+//             line.new(x1 = bar_index, y1 = val, x2 = bi, y2 = val, xloc=xloc.bar_index, color = #00FF00, style = line.style_dotted)
+    
+//     if array.size(arr_broken_bear_bars) > 0 // For Bearish Breakout
+//         array.sort(arr_broken_bear_bars, order.descending)
+        
+//         [val , bi] = f_decode_hm_arr( array.get(arr_broken_bear_bars, 0) )
+        
+//         if bar_index - bi <= max_line_back
+//             line.new(x1 = bar_index, y1 = val, x2 = bi, y2 = val, xloc=xloc.bar_index, color = #FF0000, style = line.style_dotted)
+// // ] This method would be used for the Rob Hoffman Breakout Strategy, not for Stop Hunt Detection
+
+// ]
+
+// FRACTALS
+// [
+// Conditions [
+fractal_lback = 2 // Lookback period for Fractals
+
+cond_up_fractal = high[fractal_lback + 2] < high[fractal_lback] and high[fractal_lback + 1] < high[fractal_lback] and high[fractal_lback - 1] < high[fractal_lback] 
+  and high[fractal_lback - 2] < high[fractal_lback] or high[fractal_lback + 3] < high[fractal_lback] and high[fractal_lback + 2] < high[fractal_lback] 
+  and high[fractal_lback + 1] == high[fractal_lback] and high[fractal_lback - 1] < high[fractal_lback] and high[fractal_lback - 2] < high[fractal_lback] 
+  or high[fractal_lback + 4] < high[fractal_lback] and high[fractal_lback + 3] < high[fractal_lback] and high[fractal_lback + 2] == high[fractal_lback] 
+  and high[fractal_lback + 1] <= high[fractal_lback] and high[fractal_lback - 1] < high[fractal_lback] and high[fractal_lback - 2] < high[fractal_lback] 
+  or high[fractal_lback + 5] < high[fractal_lback] and high[fractal_lback + 4] < high[fractal_lback] and high[fractal_lback + 3] == high[fractal_lback] 
+  and high[fractal_lback + 2] == high[fractal_lback] and high[fractal_lback + 1] <= high[fractal_lback] and high[fractal_lback - 1] < high[fractal_lback] 
+  and high[fractal_lback - 2] < high[fractal_lback] or high[fractal_lback + 6] < high[fractal_lback] and high[fractal_lback + 5] < high[fractal_lback] 
+  and high[fractal_lback + 4] == high[fractal_lback] and high[fractal_lback + 3] <= high[fractal_lback] and high[fractal_lback + 2] == high[fractal_lback] 
+  and high[fractal_lback + 1] <= high[fractal_lback] and high[fractal_lback - 1] < high[fractal_lback] and high[fractal_lback - 2] < high[fractal_lback]
+  
+  
+cond_dn_fractal = low[fractal_lback + 2] > low[fractal_lback] and low[fractal_lback + 1] > low[fractal_lback] and low[fractal_lback - 1] > low[fractal_lback] 
+  and low[fractal_lback - 2] > low[fractal_lback] or low[fractal_lback + 3] > low[fractal_lback] and low[fractal_lback + 2] > low[fractal_lback] 
+  and low[fractal_lback + 1] == low[fractal_lback] and low[fractal_lback - 1] > low[fractal_lback] and low[fractal_lback - 2] > low[fractal_lback] 
+  or low[fractal_lback + 4] > low[fractal_lback] and low[fractal_lback + 3] > low[fractal_lback] and low[fractal_lback + 2] == low[fractal_lback] 
+  and low[fractal_lback + 1] >= low[fractal_lback] and low[fractal_lback - 1] > low[fractal_lback] and low[fractal_lback - 2] > low[fractal_lback] 
+  or low[fractal_lback + 5] > low[fractal_lback] and low[fractal_lback + 4] > low[fractal_lback] and low[fractal_lback + 3] == low[fractal_lback] 
+  and low[fractal_lback + 2] == low[fractal_lback] and low[fractal_lback + 1] >= low[fractal_lback] and low[fractal_lback - 1] > low[fractal_lback] 
+  and low[fractal_lback - 2] > low[fractal_lback] or low[fractal_lback + 6] > low[fractal_lback] and low[fractal_lback + 5] > low[fractal_lback] 
+  and low[fractal_lback + 4] == low[fractal_lback] and low[fractal_lback + 3] >= low[fractal_lback] and low[fractal_lback + 2] == low[fractal_lback] 
+  and low[fractal_lback + 1] >= low[fractal_lback] and low[fractal_lback - 1] > low[fractal_lback] and low[fractal_lback - 2] > low[fractal_lback]
+// ]
+
+// Parameters and Functions [
+var arr_up_fractal = array.new_string(array_limit)
+var arr_dn_fractal = array.new_string(array_limit)
+
+f_add_fractal(_type, val_HL, _bi ) =>
+    // [
+    _text = "#" + "|" + str.tostring(val_HL) + "|" + str.tostring(_bi)
+    
+    if _type == "up"
+        // Store in Bull Array
+        if array.size(arr_up_fractal) >= array_limit     
+            array.pop(arr_up_fractal)
+            array.unshift(arr_up_fractal, _text)
+        else
+            array.unshift(arr_up_fractal, _text)
+    
+    else if _type == "down"
+        // Store in Bear Array
+        if array.size(arr_dn_fractal) >= array_limit     
+            array.pop(arr_dn_fractal)
+            array.unshift(arr_dn_fractal, _text)
+        else
+            array.unshift(arr_dn_fractal, _text)
+    // ]
+    
+f_decode_fractal_arr(_text) => 
+    // [
+    txt_array = str.split(_text, "|")
+    
+    if array.size(txt_array) == 3
+        val = str.tonumber( array.get(txt_array, 1) )
+        bi = int( str.tonumber( array.get(txt_array, 2) ) )
+    
+        [val, bi]
+    // ]
+
+if cond_up_fractal
+    f_add_fractal("up", high[fractal_lback], bar_index[fractal_lback] )
+
+if cond_dn_fractal
+    f_add_fractal("down", low[fractal_lback], bar_index[fractal_lback] )
+
+// ]
+// ]
+
+// ZIGZAG 
+// [
+prd = 2
+bool newbar = ta.change(time) != 0
+
+tf_bi = ta.valuewhen(newbar, bar_index, prd - 1)
+len = bar_index - tf_bi + 1
+
+float ph = na, float pl = na
+ph := ta.highestbars(high, nz(len, 1)) == 0 ? high : na
+pl := ta.lowestbars(low, nz(len, 1)) == 0 ? low : na
+
+var dir = 0
+iff_1 = pl and na(ph) ? -1 : dir
+dir := ph and na(pl) ? 1 : iff_1
+var max_array_size = 50
+var zigzag = array.new_float(0)
+oldzigzag = array.copy(zigzag)
+
+add_to_zigzag(value, bindex) =>
+    array.unshift(zigzag, bindex)
+    array.unshift(zigzag, value)
+    if array.size(zigzag) > max_array_size
+        array.pop(zigzag)
+        array.pop(zigzag)
+
+update_zigzag(value, bindex) =>
+    if array.size(zigzag) == 0
+        add_to_zigzag(value, bindex)
+    else
+        if dir == 1 and value > array.get(zigzag, 0) or dir == -1 and value < array.get(zigzag, 0)
+            array.set(zigzag, 0, value)
+            array.set(zigzag, 1, bindex)
+        0.
+
+var arr_up_zigzag = array.new_string(array_limit)
+var arr_dn_zigzag = array.new_string(array_limit)
+
+// Functions for Raid Dectection
+f_add_zigzag(_type, val_HL, _bi ) =>
+    // [
+    _text = "#" + "|" + str.tostring(val_HL) + "|" + str.tostring(_bi)
+    
+    if _type == "up"
+        // Store in Bull Array
+        if array.size(arr_up_zigzag) >= array_limit     
+            array.pop(arr_up_zigzag)
+            array.unshift(arr_up_zigzag, _text)
+        else
+            array.unshift(arr_up_zigzag, _text)
+    
+    else if _type == "down"
+        // Store in Bear Array
+        if array.size(arr_dn_zigzag) >= array_limit     
+            array.pop(arr_dn_zigzag)
+            array.unshift(arr_dn_zigzag, _text)
+        else
+            array.unshift(arr_dn_zigzag, _text)
+    // ]
+
+bool dirchanged = dir != dir[1]
+if ph or pl
+    if dirchanged
+        add_to_zigzag(dir == 1 ? ph : pl, bar_index)
+    else
+        update_zigzag(dir == 1 ? ph : pl, bar_index)
+
+val_zig_h = fixnan(ph), val_zig_l = fixnan(pl)
+count_ph = ta.valuewhen(ph, bar_index, 0)
+count_pl = ta.valuewhen(pl, bar_index, 0)
+
+if pl and dirchanged // New High
+    f_add_zigzag("up", val_zig_h, count_ph )
+
+if ph and dirchanged // New Low
+    f_add_zigzag("down", val_zig_l, count_pl )
+
+// // Plot Zigzag {
+// if showzigzag and array.size(zigzag) >= 4 and array.size(oldzigzag) >= 4
+//     var line zzline = na
+//     if array.get(zigzag, 0) != array.get(oldzigzag, 0) or array.get(zigzag, 1) != array.get(oldzigzag, 1)
+//         if array.get(zigzag, 2) == array.get(oldzigzag, 2) and array.get(zigzag, 3) == math.round(array.get(oldzigzag, 3))
+//             line.delete(zzline)
+//         zzline := line.new(x1=math.round(array.get(zigzag, 1)), y1=array.get(zigzag, 0), x2=math.round(array.get(zigzag, 3)), y2=array.get(zigzag, 2), color=dir == 1 ? upcol : dncol, width=2)
+//         zzline
+
+// if not showzigzag and array.size(zigzag) >= 6
+//     var line zzline = na
+//     line.delete(zzline)
+//     zzline := line.new(x1=math.round(array.get(zigzag, 3)), y1=array.get(zigzag, 2), x2=math.round(array.get(zigzag, 5)), y2=array.get(zigzag, 4), color=dir == 1 ? upcol : dncol, width=2, style=line.style_dotted)
+//     zzline
+// // }
+// ]
+
+// FAIR VALUE GAPS
+// [
+// To use fair value gaps in raid detection,
+// Wicks should break the top/bottoms of FVG gaps, and still close below the value.
+// Use it as a Pivot Filter Method
+
+cond_bull_fvg = (close[2] > high[3]) and (low[1] > high[3]) 
+cond_bear_fvg = (close[2] < low[3]) and (high[1] < low[3])
+
+var arr_fvg_up = array.new_string(array_limit)
+var arr_fvg_dn = array.new_string(array_limit)
+
+f_add_fvg(_type, val_H, val_L, _bi_start ) =>
+    // [
+    _text = "#" + "|" + str.tostring(val_H) + "|" + str.tostring(val_L) + "|" + str.tostring(_bi_start)
+    
+    if _type == "up"
+        // Store in Bull FVG Array
+        if array.size(arr_fvg_up) >= array_limit     
+            array.pop(arr_fvg_up)
+            array.unshift(arr_fvg_up, _text)
+        else
+            array.unshift(arr_fvg_up, _text)
+    
+    else if _type == "down"
+        // Store in Bear FVG Array
+        if array.size(arr_fvg_dn) >= array_limit     
+            array.pop(arr_fvg_dn)
+            array.unshift(arr_fvg_dn, _text)
+        else
+            array.unshift(arr_fvg_dn, _text)
+    // ]
+
+f_decode_fvg_arr(_text) => 
+    // [
+    txt_array = str.split(_text, "|")
+    
+    if array.size(txt_array) == 4
+        val_h = str.tonumber( array.get(txt_array, 1) )
+        val_l = str.tonumber( array.get(txt_array, 2) )
+        bi_start = int( str.tonumber( array.get(txt_array, 3) ) )
+    
+        [val_h, val_l, bi_start]
+    // ]
+    
+if cond_bear_fvg
+    f_add_fvg("up", low[3], high[1], bar_index[3])
+
+if cond_bull_fvg
+    f_add_fvg("down",  low[1], high[3], bar_index[3])
+// ]
+
+// RAIDS 
+// [
+
+// Pivot Method Combination 
+use_pivot_fractal = input.bool(true, "Fractals", inline="frac_irb_zig", group="Pivot Method Detection")
+use_pivot_irb = input.bool(true, "Retracement Bar", inline="frac_irb_zig", group="Pivot Method Detection")
+use_pivot_zigzag =  input.bool(true, "Zigzag", inline="frac_irb_zig", group="Pivot Method Detection")
+
+use_fvg_raid = input.bool(false, "Filter Raids using Fair Value Gaps", group="Raid Detection")
+
+arr_raid_up = array.new_string() // For Bearish Raid
+arr_raid_dn = array.new_string() // For Bullish Raid
+
+f_add_raid(_type, val_HL, _bi ) =>
+    // [
+    _text = "#" + "|" + str.tostring(val_HL) + "|" + str.tostring(_bi)
+    
+    if _type == "up"
+        // Store in Raided Up Fractal
+        array.unshift(arr_raid_up, _text)
+    
+    else if _type == "down"
+        // Store in Raided Down Fractal
+        array.unshift(arr_raid_dn, _text)
+    // ]
+
+f_scan_raid_up() =>
+    // [
+    if use_pivot_fractal
+        remove_txt = array.new_int()
+        
+        if array.size(arr_up_fractal) > 0
+            for i = 0 to array.size(arr_up_fractal) - 1 
+                [val , bi] = f_decode_fractal_arr( array.get(arr_up_fractal, i) )
+                
+                if (high > val) and (close < val)
+                    // Add to Broken Levels -> to be plotted
+                    f_add_raid("up", val, bi )
+                    array.unshift(remove_txt, i)
+                    
+                else if close > val
+                    array.unshift(remove_txt, i)
+        
+        f_remove_index(remove_txt, arr_up_fractal)
+    
+    if use_pivot_zigzag
+        remove_txt = array.new_int()
+        
+        if array.size(arr_up_zigzag) > 0
+            for i = 0 to array.size(arr_up_zigzag) - 1 
+                [val , bi] = f_decode_fractal_arr( array.get(arr_up_zigzag, i) )
+                
+                if (high > val) and (close < val)
+                    // Add to Broken Levels -> to be plotted
+                    f_add_raid("up", val, bi )
+                    array.unshift(remove_txt, i)
+                    
+                else if close > val
+                    array.unshift(remove_txt, i)
+        
+        f_remove_index(remove_txt, arr_up_zigzag)
+    
+    if use_pivot_irb
+        remove_txt = array.new_int()
+        
+        if array.size(arr_bull_bars) > 0
+            for i = 0 to array.size(arr_bull_bars) - 1
+                // Scan through all available IRB bars to see if current candle breaks out of any
+                [val , bi] = f_decode_hm_arr( array.get(arr_bull_bars, i) )
+                
+                if (high > val) and (close < val)
+                    // Add to Broken Levels -> to be plotted
+                    f_add_raid("up", val, bi )
+                    array.unshift(remove_txt, i)
+                        
+                else if close > val 
+                    // Add to Broken Levels -> to be plotted
+                    array.unshift(remove_txt, i)
+    
+        f_remove_index(remove_txt, arr_bull_bars)
+
+    // ]
+
+f_scan_raid_dn() =>
+    // [
+    if use_pivot_fractal
+        remove_txt = array.new_int()
+        
+        if array.size(arr_dn_fractal) > 0
+            for i = 0 to array.size(arr_dn_fractal) - 1 
+                [val , bi] = f_decode_fractal_arr( array.get(arr_dn_fractal, i) )
+                
+                if (low <val) and (close > val )
+                    // Add to Broken Levels -> to be plotted
+                    f_add_raid("down", val, bi )
+                    array.unshift(remove_txt, i)
+                    
+                else if close < val
+                    array.unshift(remove_txt, i)
+        
+        f_remove_index(remove_txt, arr_dn_fractal)
+        
+    if use_pivot_zigzag
+        remove_txt = array.new_int()
+        
+        if array.size(arr_dn_zigzag) > 0
+            for i = 0 to array.size(arr_dn_zigzag) - 1 
+                [val , bi] = f_decode_fractal_arr( array.get(arr_dn_zigzag, i) )
+                
+                if (low <val) and (close > val )
+                    // Add to Broken Levels -> to be plotted
+                    f_add_raid("down", val, bi )
+                    array.unshift(remove_txt, i)
+                    
+                else if close < val
+                    array.unshift(remove_txt, i)
+        
+        f_remove_index(remove_txt, arr_dn_zigzag)
+        
+        
+    if use_pivot_irb
+        remove_txt = array.new_int()
+        
+        if array.size(arr_bear_bars) > 0
+            for i = 0 to array.size(arr_bear_bars) - 1
+                // Scan through all available IRB bars to see if current candle breaks out of any
+                [val , bi] = f_decode_hm_arr( array.get(arr_bear_bars, i) )
+                
+                if (low < val) and (close > val )
+                    // Add to Broken Levels -> to be plotted
+                    f_add_raid("down", val, bi )
+                    array.unshift(remove_txt, i)
+                        
+                else if close < val 
+                    // Add to Broken Levels -> to be plotted
+                    array.unshift(remove_txt, i)
+    
+        f_remove_index(remove_txt, arr_bear_bars)
+
+    // ]
+
+f_scan_fvg_up() =>
+    // [
+    remove_txt = array.new_int(), is_fvg_up = false
+    
+    if array.size(arr_fvg_up) > 0
+        for i = 0 to array.size(arr_fvg_up) - 1
+        
+            // Scan through all available IRB bars to see if current candle breaks out of any
+            [val_h, val_l, bi] = f_decode_fvg_arr( array.get(arr_fvg_up, i) )
+
+            if (high > val_l) and (close < val_h) // Bar Candle is within FVG
+                is_fvg_up := true 
+                
+            else if close > val_h // Removes the Filled FVG 
+                array.unshift(remove_txt, i)
+
+    f_remove_index(remove_txt, arr_fvg_up)
+    
+    // Return
+    is_fvg_up
+    // ]
+
+f_scan_fvg_dn() =>
+    // [
+    remove_txt = array.new_int(), is_fvg_dn = false
+    
+    if array.size(arr_fvg_dn) > 0
+        for i = 0 to array.size(arr_fvg_dn) - 1
+            // Scan through all available IRB bars to see if current candle breaks out of any
+            [val_h, val_l, bi] = f_decode_fvg_arr( array.get(arr_fvg_dn, i) )
+            
+            if (low < val_h) and (close > val_l) // Bar Candle is within FVG
+                is_fvg_dn := true
+            else if close < val_l // Removes the Filled FVG 
+                array.unshift(remove_txt, i)
+
+    f_remove_index(remove_txt, arr_fvg_dn)
+    
+    // Return
+    is_fvg_dn
+    // ]
+
+// Scan for Raids and FVG [
+f_scan_raid_up()
+f_scan_raid_dn() 
+
+cond_within_bull_fvg = f_scan_fvg_dn()
+cond_within_bear_fvg = f_scan_fvg_up()
+
+fvg_filt_raid_up = use_fvg_raid ? cond_within_bear_fvg : true
+fvg_filt_raid_dn = use_fvg_raid ? cond_within_bull_fvg : true
+// ]
+
+// Plot Raided Pivots [
+cond_bull_raid = false, cond_bear_raid = false
+
+if array.size(arr_raid_up) > 0 // For Bullish Breakout
+    cond_bull_raid := true
+        
+    // for i = 0 to array.size(arr_raid_up) - 1
+    //     [val , bi] = f_decode_fractal_arr( array.get(arr_raid_up, i) )
+        
+    //     if bar_index - bi <= max_line_back
+    //         line.new(x1 = bar_index, y1 = val, x2 = bi, y2 = val, xloc=xloc.bar_index, color = color.yellow, style = line.style_dotted)  
+    
+
+if array.size(arr_raid_dn) > 0 // For Bearish Breakout
+    cond_bear_raid := true
+    
+    // for i = 0 to array.size(arr_raid_dn) - 1
+    //     [val , bi] = f_decode_fractal_arr( array.get(arr_raid_dn, i) )
+    
+    //     if bar_index - bi <= max_line_back
+    //         line.new(x1 = bar_index, y1 = val, x2 = bi, y2 = val, xloc=xloc.bar_index, color = #FF0000, style = line.style_dotted)
+    
+// ]
+
+// Plot Raid Labels
+plotshape(cond_bull_raid and fvg_filt_raid_up, style=shape.triangledown, location=location.abovebar, color=#FF0000, title = "Bullish Raid", size=size.auto)
+plotshape(cond_bear_raid and fvg_filt_raid_dn, style=shape.triangleup, location=location.belowbar, color=#00FF00, title = "Bearish Raid", size=size.auto)
+
+// barcolor(cond_bull_raid ? #FF0000 : cond_bear_raid ? #00FF00 : #FFFFFF, editable=false)
+// ]
+
+// PLOTS 
+// [
+// plotshape(title='Up-Fractal', series=cond_up_fractal, style=shape.triangleup, location=location.abovebar, offset=-2, color=color.new(color.olive, 25))
+// plotshape(title='Down-Fractal', series=cond_dn_fractal, style=shape.triangledown, location=location.belowbar, offset=-2, color=color.new(color.maroon, 25))
+
+bgcolor(color.new(#000000, 50), editable=false)
+// barcolor(cond_bull_raid ? #FF0000 : cond_bear_raid ? #00FF00 : #FFFFFF, editable=false)
+// ]
